@@ -1,0 +1,40 @@
+project/
+├── app/
+│   ├── __init__.py          # Flask app initialization
+│   ├── forms.py             # Flask forms
+│   ├── models.py            # Flask models (e.g., for saving selected articles)
+│   ├── routes.py            # Flask routes for handling requests
+│   ├── templates/           # HTML templates
+│   │   └── review.html      # Interface for reviewing scraped articles
+│   ├── static/              # Static files (CSS, JS, images, etc.)
+│   └── __pycache__/         # Compiled Python files
+│
+├── scraper/
+│   ├── __init__.py          # Scraper module initialization
+│   ├── fetch_page.py        # Fetch web pages
+│   ├── filter_articles.py   # Filter and clean scraped articles
+│   ├── parse_articles.py    # Parse articles into structured data
+│   ├── scrape_news.py       # Main script to orchestrate scraping
+│   └── __pycache__/         # Compiled Python files
+│
+├── config/
+│   ├── wordpress_config.json # WordPress API keys and settings
+│   ├── top_100_news_sites.txt # List of top news sites
+│   └── .env                 # Environment variables
+│
+├── output/
+│   ├── news_articles/       # Scraped articles, organized by date
+│   │   └── news_articles_YYYY-MM-DD.json
+│   ├── logs/                # Logs for debugging (e.g., curl.log)
+│   │   └── scraper.log
+│
+├── tests/
+│   ├── test_scraper.py      # Tests for scraper functionalities
+│   ├── test_flask_app.py    # Tests for Flask routes and functionalities
+│   └── __pycache__/         # Compiled Python files
+│
+├── run.py                   # Entry point for the Flask app
+├── README.md                # Project documentation
+├── requirements.txt         # Python dependencies
+└── project_layout.txt       # (Optional) Reference layout of the project
+

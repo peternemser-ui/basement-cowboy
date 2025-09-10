@@ -1,0 +1,57 @@
+# News Sources Configuration
+# This file contains URLs for news scraping
+# Add one URL per line
+# Comment out problematic sources with #
+
+# Mainstream News (High Priority)
+https://www.bbc.com/news
+https://edition.cnn.com
+https://www.reuters.com
+https://apnews.com
+https://www.cbsnews.com
+https://www.nbcnews.com
+https://abcnews.go.com
+
+# Technology News
+https://techcrunch.com
+https://arstechnica.com
+https://www.theverge.com
+https://www.wired.com
+https://www.cnet.com
+https://www.engadget.com
+
+# Business & Finance
+https://www.bloomberg.com
+https://www.wsj.com
+https://www.ft.com
+https://www.forbes.com
+https://www.cnbc.com
+
+# Science & Research
+https://www.nature.com
+https://www.sciencedaily.com
+https://www.newscientist.com
+https://www.livescience.com
+
+# International
+https://www.aljazeera.com
+https://www.dw.com/en
+https://www.france24.com/en
+https://www.scmp.com
+
+# Architecture & Design
+https://www.archdaily.com
+https://www.dezeen.com
+https://www.architecturaldigest.com
+
+# Specialized Topics
+https://spectrum.ieee.org
+https://singularityhub.com
+https://futurism.com
+
+# Instructions:
+# - Keep active sources uncommented
+# - Comment out slow or problematic sources with #
+# - Test individual sources if scraping fails
+# - Add new sources at the end of their category
+# - Maintain one URL per line format

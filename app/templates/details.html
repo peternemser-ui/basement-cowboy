@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Article Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+        <style>
+        .sticky-top-section {
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            background-color: #e9e9e8;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .article-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .article-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .article-card img {
+            max-width: 100%;
+            height: auto;
+            object-fit: cover;
+            margin-bottom: 15px;
+        }
+        .form-control {
+            font-size: 0.9rem;
+        }
+        .btn {
+            font-size: 0.85rem;
+        }
+        .top-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #28a745;
+            width: 0%;
+            transition: width 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="sticky-top-section">
+            <div class="text-center mb-2">
+                <h1>Basement Cowboy News Command Center</h1>
+            </div>
+            <div class="top-buttons">
+                <button id="go-back" class="btn btn-secondary">Go Back</button>
+                <button id="generate-images" class="btn btn-warning">Create Images</button>
+                <button id="validate-titles" class="btn btn-primary" onclick="validateAllTitles()">Validate Titles</button>
+                <button id="generate-all-summaries" class="btn btn-primary" onclick="generateAllSummaries()">Generate Summaries for All</button>
+                <button id="validate-titles" class="btn btn-primary" onclick="validateAllTitles()">Validate Titles</button>
+                <button id="publish-all" class="btn btn-success" onclick="selectAllPublish()">Select All to Publish</button>
+                <button class="btn btn-success" onclick="publishArticles()">Publish to basementcowboy.com</button>
+            </div>
+            <div class="progress">
+                <div id="summary-progress-bar" class="progress-bar"></div>
+            </div>
+        </div>
+        </div>
+
+        <form id="article-details-form" action="/publish_article" method="POST">
+            {% for category, articles in articles_by_category.items() %}
+            <div class="category-section">
+                <h3 class="category-header">{{ category }}</h3>
+                <div class="article-grid">
+                    {% for article in articles %}
+                    <div class="article-card">
+                        {% if article.photo %}
+                        <img src="{{ article.photo }}" alt="Article Image" id="article-image-{{ loop.index0 }}">
+                        {% else %}
+                        <img src="{{ url_for('static', filename='default.jpg') }}" alt="Default Image" id="article-image-{{ loop.index0 }}">
+                        {% endif %}
+
+                        <label for="title-{{ loop.index0 }}">Title:</label>
+                        <input type="text" id="title-{{ loop.index0 }}" name="title-{{ loop.index0 }}" value="{{ article.headline }}" class="form-control mb-2">
+
+                        <label for="summary-{{ loop.index0 }}">Summary:</label>
+                        <textarea id="summary-{{ loop.index0 }}" name="summary-{{ loop.index0 }}" class="form-control mb-2">{{ article.summary }}</textarea>
+
+                        <label for="link-{{ loop.index0 }}">Article URL:</label>
+                        <input type="text" id="link-{{ loop.index0 }}" name="link-{{ loop.index0 }}" value="{{ article.link or '' }}" class="form-control mb-2">
+                        <label for="generate-image-{{ loop.index0 }}">
+                            <input type="checkbox" id="generate-image-{{ loop.index0 }}" name="generate-image"> Generate Image
+                        </label>
+                        <label for="category-{{ loop.index0 }}">Category:</label>
+                        <select id="category-{{ loop.index0 }}" name="category-{{ loop.index0 }}" class="form-control mb-2">
+                            {% for cat in categories %}
+                            <option value="{{ cat }}" {% if article.category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <label for="headline-{{ loop.index0 }}">Headline:</label>
+                        <select id="headline-{{ loop.index0 }}" name="headline-{{ loop.index0 }}" class="form-control mb-2">
+                            <option value="No" selected>No</option>
+                            <option value="Headline 1">Headline 1</option>
+                            <option value="Headline 2">Headline 2</option>
+                            <option value="Headline 3">Headline 3</option>
+                            <option value="Headline 4">Headline 4</option>
+                        </select>
+
+                        <label for="ranking-{{ loop.index0 }}">Ranking:</label>
+                        <select id="ranking-{{ loop.index0 }}" name="ranking-{{ loop.index0 }}" class="form-control mb-2">
+                            {% for i in range(1, 11) %}
+                            <option value="{{ i }}">{{ i }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <label for="image-{{ loop.index0 }}">Image URL:</label>
+                        <input type="text" id="image-{{ loop.index0 }}" name="image-{{ loop.index0 }}" value="{{ article.photo or '' }}" class="form-control mb-2">
+
+                        <div>
+                            <input type="checkbox" id="publish-{{ loop.index0 }}" name="publish-{{ loop.index0 }}" value="1">
+                            <label for="publish-{{ loop.index0 }}">Publish</label>
+                        </div>
+                        <div><button type="button" class="btn btn-primary" onclick="generateSummaryAndImage({{ loop.index0 }})">Generate Summary & Image</button>
+                                                <button type="button" class="btn btn-primary" onclick="generateSummary({{ loop.index0 }})">Generate Summary</button><br>
+</div><br>
+
+
+
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </form>
+    </div>
+
+    <script>
+        function selectAllPublish() {
+            const checkboxes = document.querySelectorAll("input[name^='publish-']");
+            checkboxes.forEach(checkbox => checkbox.checked = true);
+        }
+
+        async function publishArticles() {
+            try {
+                const formData = new FormData(document.getElementById("article-details-form"));
+                const response = await axios.post("/publish_article", formData);
+
+                if (response.data.success) {
+                    alert("Articles published successfully!");
+                    window.location.href = response.data.post_url;
+                } else {
+                    alert("Failed to publish articles: " + response.data.error);
+                }
+            } catch (error) {
+                console.error("Error publishing articles:", error);
+                alert("An error occurred while publishing articles.");
+            }
+        }
+    </script>
+     <script>
+        async function generateSummaryAndImage(index) {
+            const summaryInput = document.getElementById(`summary-${index}`);
+            const imageInput = document.getElementById(`image-${index}`);
+            const articleImage = document.getElementById(`article-image-${index}`);
+
+            if (!summaryInput.value.trim()) {
+                alert("Generating AI summary...");
+                const summaryResponse = await axios.post("/ai_summarize", { link: document.getElementById(`link-${index}`).value });
+                if (summaryResponse.data.success) {
+                    summaryInput.value = summaryResponse.data.summary;
+                } else {
+                    alert("Failed to generate summary.");
+                    return;
+                }
+            }
+
+            alert("Generating AI image...");
+            const imageResponse = await axios.post("/generate_image", { keywords: summaryInput.value });
+            if (imageResponse.data.success) {
+                imageInput.value = imageResponse.data.image_url;
+                articleImage.src = imageResponse.data.image_url;
+            } else {
+                alert("Failed to generate image.");
+            }
+        }
+    </script>
+     <script>
+        async function generateSummary(index) {
+            const summaryInput = document.getElementById(`summary-${index}`);
+            const linkInput = document.getElementById(`link-${index}`);
+
+            if (!linkInput.value.trim()) return;
+
+            try {
+                const response = await axios.post("/ai_summarize", { link: linkInput.value });
+                if (response.data.success) {
+                    summaryInput.value = response.data.summary;
+                }
+            } catch (error) {
+                console.error("Error generating summary:", error);
+            }
+        }
+
+        async function generateAllSummaries() {
+            const textareas = document.querySelectorAll("textarea[id^='summary-']");
+            const progressBar = document.getElementById("summary-progress-bar");
+            let completed = 0;
+            const total = textareas.length;
+
+            for (const textarea of textareas) {
+                const index = textarea.id.split('-')[1];
+                await generateSummary(index);
+                completed++;
+                progressBar.style.width = `${(completed / total) * 100}%`;
+            }
+        }
+    </script>
+        <script>
+        document.getElementById("generate-images").addEventListener("click", async () => {
+            const selectedIndexes = [];
+            document.querySelectorAll("input[name='generate-image']:checked").forEach(checkbox => {
+                selectedIndexes.push(checkbox.id.split("-")[2]);
+            });
+
+            if (selectedIndexes.length === 0) {
+                alert("No articles selected for image generation.");
+                return;
+            }
+
+            for (const index of selectedIndexes) {
+                const summaryInput = document.getElementById(`summary-${index}`);
+                const imageInput = document.getElementById(`article-image-${index}`);
+                
+                alert("Generating AI image for article " + index);
+                const imageResponse = await axios.post("/generate_image", { keywords: summaryInput.value });
+                
+                if (imageResponse.data.success) {
+                    imageInput.src = imageResponse.data.image_url;
+                } else {
+                    alert("Failed to generate image for article " + index);
+                }
+            }
+        });
+    </script>
+    <script>
+        async function validateTitle(idx) {
+            const title = document.getElementById(`title-${idx}`).value;
+            const resultDiv = document.getElementById(`validation-result-${idx}`);
+
+            resultDiv.textContent = "Validating...";
+
+            try {
+                const response = await axios.post('/ai_validate_title', { title });
+
+                if (response.data.success) {
+                    resultDiv.textContent = response.data.validation_result;
+                } else {
+                    resultDiv.textContent = `Validation failed: ${response.data.error}`;
+                }
+            } catch (error) {
+                resultDiv.textContent = `Validation error: ${error}`;
+            }
+        }
+
+        function validateAllTitles() {
+            const inputs = document.querySelectorAll("input[id^='title-']");
+            inputs = Array.from(inputs);
+            inputs.forEach((input, index) => validateTitle(index));
+        }
+
+        function selectAllPublish() {
+            const publishCheckboxes = document.querySelectorAll("input[name^='publish-']");
+            publishCheckboxes.forEach(cb => cb.checked = true);
+        }
+
+        function publishArticles() {
+            document.getElementById('article-details-form').submit();
+        }
+    </script>
+</body>
+</html>

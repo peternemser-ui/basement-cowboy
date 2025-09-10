@@ -1,0 +1,27 @@
+{
+  "wordpress_url": "https://your-wordpress-site.com",
+  "username": "your-wp-admin-username",
+  "application_password": "xxxx xxxx xxxx xxxx",
+  "_comments": {
+    "setup_instructions": [
+      "1. Log into your WordPress admin dashboard",
+      "2. Go to Users → Profile (or Users → All Users → [Your User])",
+      "3. Scroll to 'Application Passwords' section",
+      "4. Enter application name: 'Basement Cowboy API'",
+      "5. Click 'Add New Application Password'",
+      "6. Copy the generated password (format: xxxx xxxx xxxx xxxx)",
+      "7. Paste it in the application_password field above"
+    ],
+    "wordpress_requirements": [
+      "WordPress 5.0 or higher",
+      "REST API enabled (enabled by default)",
+      "User must have 'edit_posts' capability",
+      "Site must be accessible via HTTPS (recommended)"
+    ],
+    "testing_api_access": [
+      "Test with curl:",
+      "curl -u 'username:app-password' 'https://your-site.com/wp-json/wp/v2/posts?per_page=1'",
+      "Should return JSON response with posts data"
+    ]
+  }
+}

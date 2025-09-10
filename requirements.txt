@@ -1,0 +1,7 @@
+Flask
+python-wordpress-xmlrpc
+openai
+playwright
+requests
+beautifulsoup4
+python-dotenv
