@@ -155,6 +155,9 @@
                 <button id="select-all-btn" class="btn btn-warning me-2" onclick="selectAllToPublish()">
                     <i class="fas fa-check-double"></i> Select All to Publish
                 </button>
+                <button id="rank-top-100-btn" class="btn btn-info me-2" onclick="rankTop100Articles()">
+                    <i class="fas fa-trophy"></i> Rank Top 100
+                </button>
                 <button type="submit" form="articles-form" class="btn btn-success" id="review-button" disabled>Review Selected Articles</button>
                 <span class="counter insufficient" id="article-counter">Selected: 0/50 (minimum required)</span>
             </div>
@@ -400,6 +403,89 @@
             }
             
             updateCounter();
+        }
+
+        // Rank Top 100 Articles function
+        async function rankTop100Articles() {
+            const rankBtn = document.getElementById('rank-top-100-btn');
+            const progressBar = document.getElementById('progress-bar');
+            const originalBtnText = rankBtn.innerHTML;
+            
+            try {
+                // Update button to show loading
+                rankBtn.disabled = true;
+                rankBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ranking Articles...';
+                
+                // Update progress bar
+                progressBar.style.width = '10%';
+                progressBar.textContent = 'Analyzing articles...';
+                
+                // Call the ranking API
+                const response = await axios.post('/rank_articles');
+                
+                if (response.data && response.data.top_100) {
+                    progressBar.style.width = '50%';
+                    progressBar.textContent = 'Processing rankings...';
+                    
+                    // Clear all current selections
+                    checkboxes.forEach(checkbox => checkbox.checked = false);
+                    
+                    // Select top 100 ranked articles
+                    const top100Indices = response.data.top_100.map(item => item.index);
+                    
+                    checkboxes.forEach((checkbox, index) => {
+                        if (top100Indices.includes(index)) {
+                            checkbox.checked = true;
+                        }
+                    });
+                    
+                    // Update counter
+                    updateCounter();
+                    
+                    // Show ranking results
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = `Selected top ${response.data.top_100.length} articles (ranked by AI algorithm)`;
+                    
+                    // Optional: Show detailed ranking information
+                    console.log('Ranking Summary:', response.data.scoring_summary);
+                    console.log('Top 10 Articles:', response.data.top_100.slice(0, 10));
+                    
+                    // Show success message
+                    rankBtn.className = 'btn btn-success me-2';
+                    rankBtn.innerHTML = '<i class="fas fa-check"></i> Top 100 Selected';
+                    
+                    // Reset button after 3 seconds
+                    setTimeout(() => {
+                        rankBtn.disabled = false;
+                        rankBtn.className = 'btn btn-info me-2';
+                        rankBtn.innerHTML = originalBtnText;
+                        progressBar.style.width = '0%';
+                        progressBar.textContent = 'Ready - Click \'Regenerate Scraper\' to start';
+                    }, 3000);
+                    
+                } else {
+                    throw new Error('Invalid response from ranking API');
+                }
+                
+            } catch (error) {
+                console.error('Error ranking articles:', error);
+                
+                // Show error state
+                rankBtn.className = 'btn btn-danger me-2';
+                rankBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ranking Failed';
+                
+                progressBar.style.width = '100%';
+                progressBar.textContent = 'Error: ' + (error.response?.data?.error || error.message);
+                
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    rankBtn.disabled = false;
+                    rankBtn.className = 'btn btn-info me-2';
+                    rankBtn.innerHTML = originalBtnText;
+                    progressBar.style.width = '0%';
+                    progressBar.textContent = 'Ready - Click \'Regenerate Scraper\' to start';
+                }, 3000);
+            }
         }
     </script>
 </body>

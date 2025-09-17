@@ -1316,6 +1316,183 @@ def create_app():
             logging.error(f"Error categorizing article: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
 
+    @app.route('/rank_articles', methods=['POST'])
+    def rank_articles():
+        """Intelligent article ranking algorithm to identify top 100 articles for publishing"""
+        try:
+            # Get OpenAI client for quality analysis
+            client = get_openai_client()
+            
+            # Load articles from the most recent file
+            articles_dir = os.path.join(os.path.dirname(__file__), '..', 'output', 'news_articles')
+            article_files = [f for f in os.listdir(articles_dir) if f.endswith('.json')]
+            
+            if not article_files:
+                return jsonify({'error': 'No article files found'}), 404
+            
+            # Get the most recent file
+            latest_file = max(article_files, key=lambda x: os.path.getctime(os.path.join(articles_dir, x)))
+            file_path = os.path.join(articles_dir, latest_file)
+            
+            with open(file_path, 'r', encoding='utf-8') as f:
+                articles = json.load(f)
+            
+            logging.info(f"Ranking {len(articles)} articles from {latest_file}")
+            
+            # Known high-quality news sources (higher weight)
+            premium_sources = [
+                'reuters.com', 'ap.org', 'bbc.com', 'nytimes.com', 'washingtonpost.com',
+                'wsj.com', 'theguardian.com', 'npr.org', 'abcnews.go.com', 'cnn.com',
+                'bloomberg.com', 'economist.com', 'foreignaffairs.com'
+            ]
+            
+            # Calculate scores for each article
+            ranked_articles = []
+            
+            for i, article in enumerate(articles):
+                score = 0
+                scoring_details = {}
+                
+                # 1. Content Quality Score (25%)
+                content_score = 0
+                if article.get('detailed_summary') and article['detailed_summary'].lower() not in ['no content available', 'content not available']:
+                    content_length = len(article['detailed_summary'])
+                    if content_length > 200:
+                        content_score = 25
+                    elif content_length > 100:
+                        content_score = 20
+                    elif content_length > 50:
+                        content_score = 15
+                    else:
+                        content_score = 10
+                elif article.get('summary') and article['summary'].lower() not in ['no content available', 'content not available']:
+                    content_score = 15
+                else:
+                    content_score = 5
+                
+                scoring_details['content_quality'] = content_score
+                score += content_score
+                
+                # 2. Source Credibility Score (20%)
+                source_score = 10  # Default score
+                link = article.get('link', '')
+                for premium in premium_sources:
+                    if premium in link.lower():
+                        source_score = 20
+                        break
+                
+                scoring_details['source_credibility'] = source_score
+                score += source_score
+                
+                # 3. Title Engagement Score (20%)
+                title = article.get('headline', '')
+                engagement_score = 10  # Default
+                
+                # Length sweet spot (60-100 characters)
+                if 60 <= len(title) <= 100:
+                    engagement_score += 5
+                
+                # Engagement keywords
+                engagement_keywords = [
+                    'breaking', 'exclusive', 'revealed', 'shocking', 'urgent', 'major',
+                    'critical', 'important', 'significant', 'unprecedented', 'historic'
+                ]
+                if any(keyword in title.lower() for keyword in engagement_keywords):
+                    engagement_score += 3
+                
+                # Avoid clickbait indicators
+                clickbait_indicators = ['you won\'t believe', 'shocking truth', 'one simple trick']
+                if any(indicator in title.lower() for indicator in clickbait_indicators):
+                    engagement_score -= 5
+                
+                engagement_score = max(5, min(20, engagement_score))  # Clamp between 5-20
+                scoring_details['title_engagement'] = engagement_score
+                score += engagement_score
+                
+                # 4. Visual Content Score (15%)
+                photo_score = 0
+                if article.get('photo') and article['photo'] != 'No photo available':
+                    photo_score = 15
+                else:
+                    photo_score = 5
+                
+                scoring_details['visual_content'] = photo_score
+                score += photo_score
+                
+                # 5. Category Diversity Bonus (20%)
+                # This will be calculated after we see all categories
+                category_score = 10  # Base score, will be adjusted later
+                scoring_details['category_diversity'] = category_score
+                score += category_score
+                
+                ranked_articles.append({
+                    'index': i,
+                    'article': article,
+                    'score': score,
+                    'scoring_details': scoring_details
+                })
+            
+            # Calculate category diversity bonuses
+            category_counts = {}
+            for item in ranked_articles:
+                category = item['article'].get('category', 'Uncategorized')
+                category_counts[category] = category_counts.get(category, 0) + 1
+            
+            # Adjust scores based on category diversity
+            for item in ranked_articles:
+                category = item['article'].get('category', 'Uncategorized')
+                count = category_counts[category]
+                
+                # Bonus for diverse categories (fewer articles in category = higher bonus)
+                if count <= 5:
+                    diversity_bonus = 10
+                elif count <= 10:
+                    diversity_bonus = 7
+                elif count <= 20:
+                    diversity_bonus = 5
+                else:
+                    diversity_bonus = 2
+                
+                item['scoring_details']['category_diversity'] = diversity_bonus
+                item['score'] = item['score'] - 10 + diversity_bonus  # Replace base score
+            
+            # Sort by score (highest first)
+            ranked_articles.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Get top 100
+            top_100 = ranked_articles[:100]
+            
+            # Prepare response
+            result = {
+                'total_articles': len(articles),
+                'top_100': [
+                    {
+                        'index': item['index'],
+                        'headline': item['article'].get('headline', ''),
+                        'category': item['article'].get('category', 'Uncategorized'),
+                        'score': round(item['score'], 1),
+                        'rank': rank + 1,
+                        'scoring_breakdown': item['scoring_details']
+                    }
+                    for rank, item in enumerate(top_100)
+                ],
+                'scoring_summary': {
+                    'content_quality': '25% - Based on summary length and quality',
+                    'source_credibility': '20% - Premium news sources get higher scores',
+                    'title_engagement': '20% - Title length, keywords, avoiding clickbait',
+                    'visual_content': '15% - Presence of photos/media',
+                    'category_diversity': '20% - Bonus for diverse category distribution'
+                }
+            }
+            
+            logging.info(f"Successfully ranked articles. Top score: {top_100[0]['score']}, Bottom score: {top_100[-1]['score']}")
+            
+            return jsonify(result)
+            
+        except Exception as e:
+            logging.error(f"Error in article ranking: {str(e)}")
+            return jsonify({'error': f'Failed to rank articles: {str(e)}'}), 500
+
         
     ########################################################################
     # Secret Key and Return
