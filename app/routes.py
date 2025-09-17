@@ -1230,6 +1230,91 @@ def create_app():
             logging.error(f"Error validating title: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
 
+    ########################################################################
+    # AI Auto-Categorization
+    ########################################################################
+    @app.route('/ai_categorize', methods=['POST'])
+    def ai_categorize():
+        data = request.json
+        title = data.get('title', '')
+        summary = data.get('summary', '')
+
+        if not title and not summary:
+            return jsonify({"success": False, "error": "No title or summary provided."}), 400
+
+        try:
+            # Load available categories
+            categories_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'categories.json')
+            with open(categories_path, 'r', encoding='utf-8') as f:
+                categories_data = json.load(f)
+            categories = categories_data.get('categories', [])
+            
+            if not categories:
+                return jsonify({"success": False, "error": "No categories available."}), 500
+
+            oclient = get_openai_client()
+            if not oclient:
+                return jsonify({"success": False, "error": "OpenAI API key not available. Please validate your API key first."}), 401
+            
+            # Create content for analysis
+            content = f"Title: {title}\nSummary: {summary}" if title and summary else (title or summary)
+            
+            # Create AI prompt for categorization
+            categories_list = "\n".join([f"- {cat}" for cat in categories])
+            
+            try:
+                ai_response = oclient.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are an expert news categorization assistant. Analyze the article content and suggest the most appropriate category from the provided list. Respond with ONLY the exact category name from the list, followed by a confidence score (0-100) in this format: 'CATEGORY_NAME|CONFIDENCE_SCORE'"},
+                        {"role": "user", "content": f"Article content:\n{content}\n\nAvailable categories:\n{categories_list}\n\nSelect the most appropriate category and provide your confidence score (0-100):"}
+                    ],
+                    max_tokens=50,
+                    temperature=0.1
+                )
+                
+                response_text = ai_response.choices[0].message.content.strip()
+                
+                # Parse response (expected format: "CATEGORY|CONFIDENCE")
+                if '|' in response_text:
+                    suggested_category, confidence_str = response_text.split('|', 1)
+                    try:
+                        confidence = int(confidence_str.strip())
+                    except ValueError:
+                        confidence = 75  # Default confidence if parsing fails
+                else:
+                    suggested_category = response_text
+                    confidence = 75  # Default confidence
+                
+                suggested_category = suggested_category.strip()
+                
+                # Validate that the suggested category exists in our list
+                if suggested_category not in categories:
+                    # Try to find a close match
+                    suggested_category_lower = suggested_category.lower()
+                    for cat in categories:
+                        if cat.lower() == suggested_category_lower or suggested_category_lower in cat.lower():
+                            suggested_category = cat
+                            break
+                    else:
+                        # If no match found, default to first category with low confidence
+                        suggested_category = categories[0]
+                        confidence = 30
+                
+                return jsonify({
+                    "success": True, 
+                    "suggested_category": suggested_category,
+                    "confidence": confidence,
+                    "all_categories": categories
+                })
+                
+            except Exception as e:
+                logging.error(f"OpenAI error categorizing article: {e}", exc_info=True)
+                return jsonify({"success": False, "error": str(e)}), 500
+
+        except Exception as e:
+            logging.error(f"Error categorizing article: {e}")
+            return jsonify({"success": False, "error": str(e)}), 500
 
         
     ########################################################################
