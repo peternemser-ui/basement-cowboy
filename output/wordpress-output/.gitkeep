@@ -1,0 +1,2 @@
+# This file ensures the wordpress-output directory is preserved in git
+# WordPress output files will be generated here during runtime
