@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Article Details</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='scripts.js') }}"></script>
@@ -20,6 +21,18 @@
             border-radius: 8px;
             padding: 15px;
             background: white;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .ranking-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            z-index: 10;
+            font-size: 0.75rem;
+        }
+        .article-image {
+            margin-top: 25px; /* Add space for badge */
         }
         .article-image {
             width: 100%;
@@ -78,6 +91,73 @@
         }
         .card:hover {
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+    
+    <style>
+        /* EMERGENCY BUTTON STYLING - OVERRIDE EVERYTHING */
+        .btn-lg,
+        #select-all-publish-btn,
+        #auto-categorize-all-btn,
+        button[onclick*="publishArticles"],
+        button[onclick*="generateSummary"],
+        button[onclick*="generateImage"],
+        button[onclick*="autoCategorizeArticle"] {
+            padding: 0.3rem 0.6rem !important;
+            font-size: 1rem !important;
+            font-weight: 500 !important;
+            border-radius: 0.25rem !important;
+            min-height: 32px !important;
+            max-height: 32px !important;
+            text-transform: none !important;
+            letter-spacing: 0px !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1) !important;
+            transition: all 0.15s ease !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        
+        .btn-lg:hover,
+        #select-all-publish-btn:hover,
+        #auto-categorize-all-btn:hover,
+        button[onclick*="publishArticles"]:hover,
+        button[onclick*="generateSummary"]:hover,
+        button[onclick*="generateImage"]:hover,
+        button[onclick*="autoCategorizeArticle"]:hover {
+            transform: translateY(-1px) !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.12) !important;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+            border: 2px solid #0056b3 !important;
+            color: white !important;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important;
+            border: 2px solid #e0a800 !important;
+            color: #212529 !important;
+        }
+        
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%) !important;
+            border: 2px solid #117a8b !important;
+            color: white !important;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+            border: 2px solid #1e7e34 !important;
+            color: white !important;
+        }
+        
+        /* Input group buttons */
+        .input-group .btn {
+            min-height: 50px !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
         }
     </style>
 </head>
@@ -472,8 +552,6 @@
                                 } finally {
                                         if (bsModal) bsModal.hide();
                                 }
-                        });
-
                         // Select-all toolbar helpers (these are for future use)
                         // const selectAllSummariesBtn = document.getElementById('select-all-summaries');
                         // if (selectAllSummariesBtn) selectAllSummariesBtn.addEventListener('click', () => {
@@ -520,12 +598,12 @@
                 // If all are selected, deselect all
                 publishCheckboxes.forEach(checkbox => checkbox.checked = false);
                 selectAllBtn.innerHTML = '<i class="fas fa-check-double"></i> Select All to Publish';
-                selectAllBtn.className = 'btn btn-warning btn-sm me-2';
+                selectAllBtn.className = 'btn btn-warning me-2';
             } else {
                 // Select all articles
                 publishCheckboxes.forEach(checkbox => checkbox.checked = true);
                 selectAllBtn.innerHTML = '<i class="fas fa-times-circle"></i> Deselect All';
-                selectAllBtn.className = 'btn btn-outline-warning btn-sm me-2';
+                selectAllBtn.className = 'btn btn-outline-warning me-2';
             }
         }
 
@@ -731,6 +809,15 @@
                             <i class="fas fa-newspaper text-primary"></i> Article Enhancement Studio
                         </h1>
                         <p class="text-muted mb-0">Review, enhance, and publish your curated news articles</p>
+                        <!-- Ranking indicator -->
+                        <div class="alert alert-light border-info alert-dismissible fade show mt-2 mb-0 py-2" role="alert">
+                            <small class="text-info">
+                                <i class="fas fa-info-circle"></i> 
+                                <strong>Smart Ranking:</strong> Articles sorted by AI quality score 
+                                <span class="badge bg-success badge-sm">1-10</span> <span class="badge bg-warning badge-sm">11-50</span> <span class="badge bg-secondary badge-sm">51+</span>
+                            </small>
+                            <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
                     </div>
                     <div class="text-end">
                         <a href="{{ url_for('review') }}" class="btn btn-outline-secondary btn-sm me-2">
@@ -761,13 +848,13 @@
                         <div class="row align-items-center">
                             <div class="col-md-12">
                                 <div class="btn-group" role="group">
-                                    <button type="button" class="btn btn-warning btn-sm me-2" id="select-all-publish-btn" onclick="selectAllToPublish()">
+                                    <button type="button" class="btn btn-warning me-2" id="select-all-publish-btn" onclick="selectAllToPublish()">
                                         <i class="fas fa-check-double"></i> Select All to Publish
                                     </button>
-                                    <button type="button" class="btn btn-info btn-sm me-2" id="auto-categorize-all-btn" onclick="autoCategorizeAll()">
+                                    <button type="button" class="btn btn-info me-2" id="auto-categorize-all-btn" onclick="autoCategorizeAll()">
                                         <i class="fas fa-robot"></i> Auto-Categorize All
                                     </button>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="publishArticles()">
+                                    <button type="button" class="btn btn-primary" onclick="publishArticles()">
                                         <i class="fas fa-rocket"></i> Publish Selected
                                     </button>
                                 </div>
@@ -786,6 +873,12 @@
                 {% for article in articles %}
                 {% set index = loop.index0 %}
                 <div class="article-card">
+                    <!-- Ranking Badge -->
+                    <span class="ranking-badge badge {% if loop.index <= 3 %}bg-success{% elif loop.index <= 10 %}bg-warning text-dark{% else %}bg-secondary{% endif %}" 
+                          title="Article #{{ loop.index }} in {{ category }} category">
+                        #{{ loop.index }}
+                    </span>
+                    
                     <img id="article-image-{{ index }}" src="{{ article.photo or url_for('static', filename='default.jpg') }}" alt="Article Image" class="article-image">
                     
                     <div class="mb-2">
@@ -797,7 +890,7 @@
                         <label class="form-label">Summary:</label>
                         <div class="input-group">
                             <textarea id="summary-{{ index }}" name="summary-{{ index }}" class="form-control form-control-sm" rows="3">{{ article.summary }}</textarea>
-                            <button type="button" class="btn btn-outline-primary btn-sm" data-index="{{ index }}" onclick="generateSummary(this.dataset.index)" title="Enhance summary with AI">
+                            <button type="button" class="btn btn-primary" data-index="{{ index }}" onclick="generateSummary(this.dataset.index)" title="Enhance summary with AI">
                                 <i class="fas fa-brain"></i> Enhance Summary
                             </button>
                         </div>
@@ -807,7 +900,7 @@
                         <label class="form-label">Image:</label>
                         <div class="input-group">
                             <input type="url" id="image-{{ index }}" name="image-{{ index }}" value="{{ article.photo }}" class="form-control form-control-sm">
-                            <button type="button" class="btn btn-outline-success btn-sm" data-index="{{ index }}" onclick="generateImage(this.dataset.index)" title="Generate AI image from summary">
+                            <button type="button" class="btn btn-success" data-index="{{ index }}" onclick="generateImage(this.dataset.index)" title="Generate AI image from summary">
                                 <i class="fas fa-magic"></i> Create AI Image
                             </button>
                         </div>
@@ -821,11 +914,11 @@
                                 <option value="{{ cat }}" {% if cat == article.category %}selected{% endif %}>{{ cat }}</option>
                                 {% endfor %}
                             </select>
-                            <button type="button" class="btn btn-outline-info btn-sm" 
+                            <button type="button" class="btn btn-info" 
                                     onclick="autoCategorizeArticle({{ index }})" 
                                     id="auto-categorize-btn-{{ index }}"
                                     title="AI Auto-Categorize">
-                                <i class="fas fa-robot"></i> Auto
+                                <i class="fas fa-robot"></i> Auto-Categorize
                             </button>
                         </div>
                         <div id="category-confidence-{{ index }}" class="small text-muted mt-1" style="display: none;"></div>

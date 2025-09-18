@@ -14,6 +14,7 @@ import openai
 from openai import OpenAI
 from dotenv import load_dotenv
 from markupsafe import escape  # For safely handling user input in publish_article
+from .seo_generator import SEOGenerator  # Import our new SEO generator
 # from .wordpress_graphql import create_wordpress_graphql_client  # Commented out temporarily
 
 # Configure logging
@@ -322,6 +323,14 @@ def create_app():
                         logging.error("Index was not an integer, skipping...")
             else:
                 selected_articles = all_articles
+                
+            # Apply ranking to sort articles by quality
+            try:
+                ranked_articles = rank_articles_by_quality(selected_articles)
+                selected_articles = [item['article'] for item in ranked_articles]
+                logging.info(f"Successfully ranked {len(selected_articles)} articles for details view")
+            except Exception as e:
+                logging.warning(f"Could not rank articles for details view: {e}. Using original order.")
 
         except Exception as e:
             flash(f"Error loading articles: {e}")
@@ -329,13 +338,24 @@ def create_app():
             selected_articles = []
 
         articles_by_category = {}
-        for article in selected_articles:
+        article_rankings = {}  # Store ranking info for each article
+        
+        for i, article in enumerate(selected_articles):
             cat = article.get('category', 'Uncategorized')
             if cat not in articles_by_category:
                 articles_by_category[cat] = []
             articles_by_category[cat].append(article)
+            
+            # Store ranking info (rank = position + 1)
+            article_rankings[i] = {
+                'rank': i + 1,
+                'total': len(selected_articles)
+            }
 
-        return render_template('details.html', articles_by_category=articles_by_category, categories=categories)
+        return render_template('details.html', 
+                             articles_by_category=articles_by_category, 
+                             categories=categories,
+                             article_rankings=article_rankings)
 
     ########################################################################
     # Regenerate Scraper
@@ -475,6 +495,16 @@ def create_app():
         for category, cat_articles in articles_by_category.items():
             structured_json.append({"category": category, "articles": cat_articles})
 
+        # Generate SEO optimization data
+        seo_generator = SEOGenerator()
+        seo_data = seo_generator.generate_seo_optimized_content(articles, "Breaking News")
+        
+        # Generate SEO metadata HTML for WordPress
+        seo_metadata_html = seo_generator.generate_wordpress_seo_metadata(seo_data)
+        
+        logging.info(f"Generated SEO data: Focus keywords: {seo_data.get('focus_keywords', [][:5])}")
+        logging.info(f"Readability score: {seo_data.get('readability_score', {})}")
+
         # Prepare the post content with JSON embedded
         # Create HTML content with images displayed properly - WordPress theme override
         html_content = """
@@ -602,8 +632,25 @@ def create_app():
                         
                         html_content += "</div>\n"
 
+        # Generate SEO metadata for enhanced WordPress optimization
+        seo_generator = SEOGenerator()
+        seo_metadata = seo_generator.generate_seo_metadata(articles)
+        
+        # Extract data for logging
+        post_meta = seo_metadata.get('post_meta', {})
+        logging.info(f"Generated SEO metadata - Title: {post_meta.get('title', 'N/A')}")
+        logging.info(f"Focus keywords: {', '.join(seo_metadata.get('focus_keywords', [])[:5])}")
+        logging.info(f"Readability score: {seo_metadata.get('readability_score', 'N/A')}")
+        
+        # Generate WordPress SEO metadata HTML
+        seo_html = seo_generator.generate_wordpress_seo_metadata(seo_metadata)
+        
+        # Add SEO metadata to HTML content
         html_content += """
         </div>
+        
+        <!-- SEO and Structured Data -->
+        {}
         
         <div class="bc-raw-data">
             <details>
@@ -611,12 +658,25 @@ def create_app():
                 <pre id="structured-json">{}</pre>
             </details>
         </div>
-        """.format(json.dumps(structured_json, indent=2))
+        """.format(
+            seo_html,
+            json.dumps(structured_json, indent=2)
+        )
 
+        # Create SEO-optimized post data
+        seo_title = seo_metadata.get('title', 'Daily News Roundup')
+        seo_excerpt = seo_metadata.get('description', 'Latest breaking news and updates from trusted sources worldwide.')
+        
         post_data = {
-            "title": "Daily News Roundup",
+            "title": seo_title,
             "content": html_content,
-            "status": "publish"
+            "excerpt": seo_excerpt,
+            "status": "publish",
+            "meta": {
+                "focus_keywords": ', '.join(seo_metadata.get('keywords', [])),
+                "readability_score": seo_metadata.get('readability_score', 0),
+                "seo_optimized": True
+            }
         }
 
         headers = {
@@ -1315,6 +1375,129 @@ def create_app():
         except Exception as e:
             logging.error(f"Error categorizing article: {e}")
             return jsonify({"success": False, "error": str(e)}), 500
+
+    def rank_articles_by_quality(articles):
+        """Helper function to rank articles by quality score - extracted from rank_articles route"""
+        # Known high-quality news sources (higher weight)
+        premium_sources = [
+            'reuters.com', 'ap.org', 'bbc.com', 'nytimes.com', 'washingtonpost.com',
+            'wsj.com', 'theguardian.com', 'npr.org', 'abcnews.go.com', 'cnn.com',
+            'bloomberg.com', 'economist.com', 'foreignaffairs.com'
+        ]
+        
+        # Calculate scores for each article
+        ranked_articles = []
+        
+        for i, article in enumerate(articles):
+            score = 0
+            scoring_details = {}
+            
+            # 1. Content Quality Score (25%)
+            content_score = 0
+            if article.get('detailed_summary') and article['detailed_summary'].lower() not in ['no content available', 'content not available']:
+                content_length = len(article['detailed_summary'])
+                if content_length > 200:
+                    content_score = 25
+                elif content_length > 100:
+                    content_score = 20
+                elif content_length > 50:
+                    content_score = 15
+                else:
+                    content_score = 10
+            elif article.get('summary') and article['summary'].lower() not in ['no content available', 'content not available']:
+                content_score = 15
+            else:
+                content_score = 5
+            
+            scoring_details['content_quality'] = content_score
+            score += content_score
+            
+            # 2. Source Credibility Score (20%)
+            source_score = 10  # Default score
+            link = article.get('link', '')
+            for premium in premium_sources:
+                if premium in link.lower():
+                    source_score = 20
+                    break
+            
+            scoring_details['source_credibility'] = source_score
+            score += source_score
+            
+            # 3. Title Engagement Score (20%)
+            title = article.get('headline', '')
+            engagement_score = 10  # Default
+            
+            # Length sweet spot (60-100 characters)
+            if 60 <= len(title) <= 100:
+                engagement_score += 5
+            
+            # Engagement keywords
+            engagement_keywords = [
+                'breaking', 'exclusive', 'revealed', 'shocking', 'urgent', 'major',
+                'critical', 'important', 'significant', 'unprecedented', 'historic'
+            ]
+            if any(keyword in title.lower() for keyword in engagement_keywords):
+                engagement_score += 3
+            
+            # Avoid clickbait indicators
+            clickbait_indicators = ['you won\'t believe', 'shocking truth', 'one simple trick']
+            if any(indicator in title.lower() for indicator in clickbait_indicators):
+                engagement_score -= 5
+            
+            engagement_score = max(5, min(20, engagement_score))  # Clamp between 5-20
+            scoring_details['title_engagement'] = engagement_score
+            score += engagement_score
+            
+            # 4. Visual Content Score (15%)
+            photo_score = 0
+            if article.get('photo') and article['photo'] != 'No photo available':
+                photo_score = 15
+            else:
+                photo_score = 5
+            
+            scoring_details['visual_content'] = photo_score
+            score += photo_score
+            
+            # 5. Category Diversity Bonus (20%) - base score for now
+            category_score = 10  # Will be adjusted after calculating diversity
+            scoring_details['category_diversity'] = category_score
+            score += category_score
+            
+            ranked_articles.append({
+                'index': i,
+                'article': article,
+                'score': score,
+                'scoring_details': scoring_details
+            })
+        
+        # Calculate category diversity bonuses
+        category_counts = {}
+        for item in ranked_articles:
+            category = item['article'].get('category', 'Uncategorized')
+            category_counts[category] = category_counts.get(category, 0) + 1
+        
+        # Adjust scores based on category diversity
+        for item in ranked_articles:
+            category = item['article'].get('category', 'Uncategorized')
+            count = category_counts[category]
+            
+            # Bonus for diverse categories (fewer articles in category = higher bonus)
+            if count <= 5:
+                diversity_bonus = 10
+            elif count <= 10:
+                diversity_bonus = 7
+            elif count <= 20:
+                diversity_bonus = 5
+            else:
+                diversity_bonus = 2
+            
+            item['scoring_details']['category_diversity'] = diversity_bonus
+            item['score'] = item['score'] - 10 + diversity_bonus  # Replace base score
+        
+        # Sort by score (highest first)
+        ranked_articles.sort(key=lambda x: x['score'], reverse=True)
+        
+        return ranked_articles
 
     @app.route('/rank_articles', methods=['POST'])
     def rank_articles():
