@@ -1,0 +1,180 @@
+# Basement Cowboy - CI/CD Configuration
+# This file contains project metadata for automated tools
+
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "basement-cowboy"
+version = "1.0.0"
+description = "AI-powered news aggregation and publishing platform"
+authors = [
+    {name = "Basement Cowboy Team", email = "contact@basementcowboy.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content :: News/Diary",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["news", "aggregation", "ai", "openai", "wordpress", "flask", "scraping"]
+requires-python = ">=3.8"
+dependencies = [
+    "flask>=2.0.0",
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+    "openai>=1.0.0",
+    "python-dotenv>=0.19.0",
+    "playwright>=1.20.0",
+    "markupsafe>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0.0",
+    "pytest-cov>=2.10.0",
+    "pytest-mock>=3.6.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "flake8>=4.0.0",
+    "bandit>=1.7.0",
+    "safety>=2.0.0",
+    "mypy>=0.910",
+]
+docker = [
+    "gunicorn>=20.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/peternemser-ui/basement-cowboy"
+Repository = "https://github.com/peternemser-ui/basement-cowboy.git"
+Documentation = "https://github.com/peternemser-ui/basement-cowboy#readme"
+"Bug Tracker" = "https://github.com/peternemser-ui/basement-cowboy/issues"
+Changelog = "https://github.com/peternemser-ui/basement-cowboy/releases"
+
+[project.scripts]
+basement-cowboy = "run:main"
+
+# ================================
+# TOOL CONFIGURATIONS
+# ================================
+
+[tool.setuptools]
+packages = ["app", "scraper"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+app = ["templates/*", "static/*"]
+scraper = ["*.py"]
+
+# Black code formatter
+[tool.black]
+line-length = 88
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
+
+# isort import sorter
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+known_first_party = ["app", "scraper"]
+
+# pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--strict-config", 
+    "--cov=app",
+    "--cov=scraper",
+    "--cov-report=term-missing:skip-covered",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=80"
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["app", "scraper"]
+omit = [
+    "*/tests/*",
+    "*/venv/*", 
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "setup.py",
+    "run.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_covered = true
+
+# MyPy type checker
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false  
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "requests.*",
+    "bs4.*", 
+    "playwright.*",
+    "openai.*"
+]
+ignore_missing_imports = true

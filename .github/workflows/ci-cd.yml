@@ -1,0 +1,274 @@
+name: CI/CD Pipeline - Basement Cowboy
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # ================================
+  # TESTING & QUALITY ASSURANCE
+  # ================================
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: 📦 Cache Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: 🔧 Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black isort
+
+    - name: 🎭 Install Playwright
+      run: |
+        playwright install chromium
+        playwright install-deps chromium
+
+    - name: 🔍 Code Quality - Linting
+      run: |
+        flake8 app/ scraper/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 app/ scraper/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: 🎨 Code Formatting Check
+      run: |
+        black --check app/ scraper/
+        isort --check-only app/ scraper/
+
+    - name: 🧪 Unit Tests
+      run: |
+        pytest tests/ -v --cov=app --cov=scraper --cov-report=xml --cov-report=html
+      env:
+        FLASK_SECRET_KEY: test-secret-key-for-ci
+        OPENAI_API_KEY: test-key
+
+    - name: 📊 Upload Coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: false
+
+  # ================================
+  # SECURITY SCANNING
+  # ================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 🔒 Security Scan - Bandit
+      run: |
+        pip install bandit[toml]
+        bandit -r app/ scraper/ -f json -o bandit-report.json || true
+
+    - name: 🔍 Dependency Check - Safety
+      run: |
+        pip install safety
+        safety check --json --output safety-report.json || true
+
+    - name: 📋 Upload Security Reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  # ================================
+  # BUILD & DOCKER
+  # ================================
+  build:
+    name: Build & Docker
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🐳 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 🏷️ Extract Metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: 🔑 Login to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 🔨 Build and Push Docker Image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # ================================
+  # DEPLOYMENT
+  # ================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🚀 Deploy to Staging
+      run: |
+        echo "🔄 Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: kubectl apply -f k8s/staging/
+        # Example: docker-compose -f docker-compose.staging.yml up -d
+        echo "✅ Staging deployment completed"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'release'
+    environment: production
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🚀 Deploy to Production
+      run: |
+        echo "🔄 Deploying to production environment..."
+        # Add your production deployment commands here
+        # Example: kubectl apply -f k8s/production/
+        # Example: docker-compose -f docker-compose.prod.yml up -d
+        echo "✅ Production deployment completed"
+
+  # ================================
+  # RELEASE AUTOMATION
+  # ================================
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test, security, build]
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🏷️ Generate Version
+      id: version
+      run: |
+        VERSION=$(date +%Y.%m.%d)-$(git rev-parse --short HEAD)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Generated version: $VERSION"
+
+    - name: 📦 Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        release_name: Basement Cowboy v${{ steps.version.outputs.version }}
+        body: |
+          ## 🚀 Basement Cowboy Release v${{ steps.version.outputs.version }}
+          
+          ### ✨ What's New
+          - Automated release from commit ${{ github.sha }}
+          - All tests passed ✅
+          - Security scans completed ✅
+          - Docker image built and published ✅
+          
+          ### 🐳 Docker Image
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}:latest
+          ```
+          
+          ### 📥 Quick Start
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd basement-cowboy
+          start-cowboy.bat  # Windows
+          ./start-production.sh  # Linux/Mac
+          ```
+          
+          ### 📋 Full Changelog
+          See commit history for detailed changes.
+        draft: false
+        prerelease: false
+
+  # ================================
+  # NOTIFICATIONS
+  # ================================
+  notify:
+    name: Notifications
+    runs-on: ubuntu-latest
+    needs: [test, security, build]
+    if: always()
+    
+    steps:
+    - name: 📢 Success Notification
+      if: needs.test.result == 'success' && needs.security.result == 'success' && needs.build.result == 'success'
+      run: |
+        echo "✅ CI/CD Pipeline completed successfully!"
+        echo "🎉 All tests passed, security checks completed, build successful"
+
+    - name: 📢 Failure Notification
+      if: needs.test.result == 'failure' || needs.security.result == 'failure' || needs.build.result == 'failure'
+      run: |
+        echo "❌ CI/CD Pipeline failed!"
+        echo "🔍 Check the logs for details"

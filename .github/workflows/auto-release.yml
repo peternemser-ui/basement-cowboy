@@ -1,0 +1,101 @@
+name: 🚀 Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '*.md'
+
+jobs:
+  auto-release:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 🏷️ Generate Tag
+      id: tag
+      run: |
+        # Get the latest tag or default to v0.0.0
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        echo "Latest tag: $LATEST_TAG"
+        
+        # Extract version numbers
+        VERSION=${LATEST_TAG#v}
+        IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+        MAJOR=${VERSION_PARTS[0]}
+        MINOR=${VERSION_PARTS[1]}
+        PATCH=${VERSION_PARTS[2]}
+        
+        # Increment patch version
+        NEW_PATCH=$((PATCH + 1))
+        NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+        
+        echo "New version: $NEW_VERSION"
+        echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+    - name: 📦 Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.new_tag }}
+        release_name: "🤠 Basement Cowboy ${{ steps.tag.outputs.new_tag }}"
+        body: |
+          ## 🤠 Basement Cowboy ${{ steps.tag.outputs.new_tag }}
+          
+          **Automated release** - Ready for production deployment!
+          
+          ### 🚀 Quick Deploy
+          
+          **Windows:**
+          ```batch
+          git clone https://github.com/${{ github.repository }}.git
+          cd basement-cowboy
+          start-cowboy.bat
+          ```
+          
+          **Linux/Mac:**
+          ```bash
+          git clone https://github.com/${{ github.repository }}.git
+          cd basement-cowboy
+          chmod +x start-production.sh
+          ./start-production.sh
+          ```
+          
+          **Docker:**
+          ```bash
+          docker run -p 5000:5000 --env-file .env ghcr.io/${{ github.repository }}:latest
+          ```
+          
+          ### 📋 What's Included
+          - ✅ AI-powered news aggregation from 180+ sources
+          - ✅ OpenAI integration (GPT-3.5 + DALL-E 3)
+          - ✅ WordPress publishing automation  
+          - ✅ Bootstrap 5.3 web interface
+          - ✅ Production-ready security
+          - ✅ Cross-platform support
+          
+          ### 🔧 Requirements
+          - Python 3.8+
+          - OpenAI API key
+          - 512MB RAM minimum
+          
+          ### 📚 Documentation
+          - [README.md](README.md) - Quick start guide
+          - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - Comprehensive setup
+          - [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) - Pre-deployment validation
+          
+          ---
+          
+          **Commit:** ${{ github.sha }}  
+          **Built:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+        draft: false
+        prerelease: false

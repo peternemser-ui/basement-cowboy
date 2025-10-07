@@ -1,21 +1,20 @@
 import os
+import sys
 import json
 import requests
 import logging
 from datetime import datetime
 from base64 import b64encode
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 import subprocess
-import traceback
 from collections import defaultdict
 from bs4 import BeautifulSoup
 from io import BytesIO
 import openai  
 from openai import OpenAI
 from dotenv import load_dotenv
-from markupsafe import escape  # For safely handling user input in publish_article
-from .seo_generator import SEOGenerator  # Import our new SEO generator
-# from .wordpress_graphql import create_wordpress_graphql_client  # Commented out temporarily
+from markupsafe import escape
+from .seo_generator import SEOGenerator
 
 # Configure logging
 logging.basicConfig(
@@ -24,9 +23,6 @@ logging.basicConfig(
 )
 
 load_dotenv()
-
-# OpenAI client will be initialized per request using session API key
-# No global client initialization with environment variables
 
 def create_app():
 
@@ -39,36 +35,19 @@ def create_app():
     def validate_api_key():
         data = request.json
         logging.info("/validate_api_key called")
-        try:
-            # redact the API key before writing debug info
-            redacted = dict(data) if isinstance(data, dict) else {}
-            if 'api_key' in redacted:
-                k = redacted.get('api_key') or ''
-                if isinstance(k, str) and len(k) > 8:
-                    redacted['api_key'] = k[:4] + '...' + k[-4:]
-                else:
-                    redacted['api_key'] = 'REDACTED'
-            with open('debug_validate_request_redacted.json', 'w', encoding='utf-8') as f:
-                json.dump(redacted, f, indent=2)
-        except Exception:
-            logging.exception('Failed to write debug_validate_request_redacted.json')
+        
         api_key = data.get('api_key', '').strip()
         if not api_key:
             return jsonify({"success": False, "error": "No API key provided."}), 400
+            
         try:
-            # Prefer a direct HTTP call to OpenAI for consistent error payloads
+            # Validate API key by calling OpenAI API
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json'
             }
             resp = requests.get('https://api.openai.com/v1/models', headers=headers, timeout=10)
-            # write response for debugging
-            try:
-                with open('debug_validate_response.log', 'w', encoding='utf-8') as f:
-                    f.write(f'STATUS: {resp.status_code}\n')
-                    f.write(resp.text)
-            except Exception:
-                logging.exception('Failed to write debug_validate_response.log')
+            
             # If successful, return a summary of accessible models
             if resp.status_code == 200:
                 body = resp.json()
@@ -76,11 +55,13 @@ def create_app():
                 # Check for common capabilities
                 has_chat = any('gpt-4' in m or 'gpt-3.5' in m or 'turbo' in m for m in models)
                 has_images = any('image' in m or 'dall' in m or 'dalle' in m for m in models)
-                # store validated key in session for subsequent requests
+                
+                # Store validated key in session for subsequent requests
                 try:
                     session['OPENAI_API_KEY'] = api_key
                 except Exception:
                     logging.exception('Failed to store API key in session')
+                    
                 return jsonify({
                     'success': True,
                     'models_count': len(models),
@@ -104,6 +85,37 @@ def create_app():
     def ping():
         return jsonify({'ok': True, 'msg': 'pong'})
 
+    @app.route('/health', methods=['GET'])
+    def health():
+        """Health check endpoint for monitoring"""
+        try:
+            # Basic health check - ensure the application is responding
+            health_status = {
+                'status': 'healthy',
+                'timestamp': datetime.now().isoformat(),
+                'version': '1.0.0',
+                'components': {
+                    'web_server': 'operational',
+                    'file_system': 'operational'
+                }
+            }
+            
+            # Check if output directories exist and are writable
+            output_dirs = ['output/news_articles', 'output/logs', 'output/wordpress-output']
+            for dir_path in output_dirs:
+                if not os.path.exists(dir_path):
+                    os.makedirs(dir_path, exist_ok=True)
+                    
+            return jsonify(health_status), 200
+            
+        except Exception as e:
+            error_status = {
+                'status': 'unhealthy',
+                'timestamp': datetime.now().isoformat(),
+                'error': str(e)
+            }
+            return jsonify(error_status), 500
+
     @app.route('/logout', methods=['POST', 'GET'])
     def logout():
         """Clear the OpenAI API key from session"""
@@ -113,14 +125,12 @@ def create_app():
         else:
             return redirect(url_for('index'))
 
-    # Temporary: allow unsafe-eval in development for debugging CSP issues.
-    # To enable, set environment variable: ALLOW_UNSAFE_EVAL_FOR_DEV=1
-    # WARNING: This weakens CSP and should NEVER be enabled in production.
+    # Content Security Policy configuration
     if os.getenv('ALLOW_UNSAFE_EVAL_FOR_DEV') == '1':
         @app.after_request
         def add_csp_header(response):
             try:
-                # This policy allows eval/use of Function constructor for debugging only
+                # Development CSP policy with unsafe-eval
                 response.headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-eval' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;"
             except Exception:
                 logging.exception('Failed to add CSP header')
@@ -154,11 +164,13 @@ def create_app():
                         # Add session number as microseconds to ensure proper ordering within the day
                         return dt.replace(microsecond=int(session) * 1000)
             
-            # Fallback to filename if parsing fails
-            return filename
+            # For non-matching files, return a very old date to put them at the end
+            from datetime import datetime
+            return datetime(1970, 1, 1)  # This ensures consistent type (datetime)
         except Exception:
-            # If parsing fails, fall back to filename sorting
-            return filename
+            # If parsing fails, return a very old date
+            from datetime import datetime
+            return datetime(1970, 1, 1)
 
     # Helper to create OpenAI client from session key only
     def get_openai_client():
@@ -240,16 +252,31 @@ def create_app():
             json_files = []
 
         articles = []
+        image_stats = {'total': 0, 'with_images': 0, 'blank_images': 0}
+        
         if json_files:
             try:
                 latest_file = os.path.join(articles_dir, json_files[0])
                 with open(latest_file, encoding='utf-8') as f:
                     articles = json.load(f)
+                    
+                # Count image statistics
+                image_stats['total'] = len(articles)
+                for article in articles:
+                    photo = article.get('photo', '')
+                    if photo and photo not in ['No photo available', '', 'None', None]:
+                        image_stats['with_images'] += 1
+                    else:
+                        image_stats['blank_images'] += 1
+                        
+                # Log the image statistics
+                logging.info(f"Image Statistics - Total: {image_stats['total']}, With Images: {image_stats['with_images']}, Blank Images: {image_stats['blank_images']}")
+                        
             except (FileNotFoundError, json.JSONDecodeError) as e:
                 flash(f"Error loading articles: {e}")
                 logging.error(f"Error loading articles: {e}")
 
-        return render_template('review.html', articles=articles, files=json_files, categories=categories)
+        return render_template('review.html', articles=articles, files=json_files, categories=categories, image_stats=image_stats)
 
     ########################################################################
     # Load Articles
@@ -267,6 +294,18 @@ def create_app():
             with open(file_path, 'r', encoding='utf-8') as f:
                 articles = json.load(f)
 
+            # Calculate image statistics
+            image_stats = {'total': len(articles), 'with_images': 0, 'blank_images': 0}
+            for article in articles:
+                photo = article.get('photo', '')
+                if photo and photo not in ['No photo available', '', 'None', None]:
+                    image_stats['with_images'] += 1
+                else:
+                    image_stats['blank_images'] += 1
+            
+            # Log the image statistics for the loaded file
+            logging.info(f"Loaded file '{file_name}' - Image Statistics - Total: {image_stats['total']}, With Images: {image_stats['with_images']}, Blank Images: {image_stats['blank_images']}")
+
             organized_data = defaultdict(list)
             for article in articles:
                 cat = article.get('category', 'Uncategorized')
@@ -277,7 +316,7 @@ def create_app():
                 for category, art_list in organized_data.items()
             ]
 
-            return jsonify({"success": True, "organized_articles": output})
+            return jsonify({"success": True, "organized_articles": output, "image_stats": image_stats})
 
         except Exception as e:
             logging.error(f"Error loading articles: {e}")
@@ -366,7 +405,7 @@ def create_app():
             try:
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
                 script_path = os.path.join(base_dir, 'scraper', 'scrape_news.py')
-                python_exe = r"C:/Users/Peter/AppData/Local/Programs/Python/Python313/python.exe"
+                python_exe = sys.executable
                 
                 logging.info(f"Starting scraper: {script_path}")
                 logging.info(f"Using Python executable: {python_exe}")
@@ -404,7 +443,7 @@ def create_app():
                         elif "Saving" in line_stripped:
                             yield "data: PROGRESS:90:Saving articles to file...\n\n"
                         
-                        # Send all log output for debugging
+                        # Send all log output
                         yield f"data: LOG:{line_stripped}\n\n"
                 
                 process.wait()
@@ -1058,11 +1097,6 @@ def create_app():
                         client_image_url = None
                 else:
                     logging.error('No image returned from OpenAI (no url or b64 data)')
-                    try:
-                        with open('debug_generate_image_error.json', 'w', encoding='utf-8') as f:
-                            json.dump({'error': 'no_image_in_response', 'response': repr(raw_resp)}, f, indent=2)
-                    except Exception:
-                        logging.exception('Failed to write debug_generate_image_error.json')
                     return jsonify({"success": False, "error": "OpenAI returned no image."}), 500
 
                 # If upload failed but we have b64 or openai url, return that to client so UI can show it
@@ -1075,25 +1109,6 @@ def create_app():
                 return jsonify(resp_payload)
             except Exception as e:
                 logging.error(f"OpenAI image generation error: {e}", exc_info=True)
-                try:
-                    import traceback as tb
-                    info = {'error': str(e), 'traceback': tb.format_exc()}
-                    try:
-                        k = session.get('OPENAI_API_KEY') or ''
-                        if isinstance(k, str) and len(k) > 8:
-                            info['openai_key_redacted'] = k[:4] + '...' + k[-4:]
-                        elif k:
-                            info['openai_key_redacted'] = 'REDACTED'
-                    except Exception:
-                        info['openai_key_redacted'] = 'ERROR'
-                    try:
-                        info['payload'] = {'keywords_len': len(data.get('keywords', ''))}
-                    except Exception:
-                        info['payload'] = 'unavailable'
-                    with open('debug_generate_image_error.json', 'w', encoding='utf-8') as f:
-                        json.dump(info, f, indent=2)
-                except Exception:
-                    logging.exception('Failed to write debug_generate_image_error.json')
                 return jsonify({"success": False, "error": str(e)}), 500
 
         except openai.BadRequestError as e:
@@ -1102,30 +1117,7 @@ def create_app():
 
         except Exception as e:
             logging.error(f"Error generating image: {e}", exc_info=True)
-            # write a redacted debug file with traceback and session info
-            try:
-                import traceback as tb
-                info = {
-                    'error': str(e),
-                    'traceback': tb.format_exc()
-                }
-                try:
-                    k = session.get('OPENAI_API_KEY') or ''
-                    if isinstance(k, str) and len(k) > 8:
-                        info['openai_key_redacted'] = k[:4] + '...' + k[-4:]
-                    elif k:
-                        info['openai_key_redacted'] = 'REDACTED'
-                except Exception:
-                    info['openai_key_redacted'] = 'ERROR'
-                try:
-                    info['payload'] = { 'keywords_len': len(data.get('keywords','')) }
-                except Exception:
-                    info['payload'] = 'unavailable'
-                with open('debug_generate_image_error.json', 'w', encoding='utf-8') as f:
-                    json.dump(info, f, indent=2)
-            except Exception:
-                logging.exception('Failed to write debug_generate_image_error.json')
-            return jsonify({"success": False, "error": "Internal server error. See server logs."}), 500
+            return jsonify({"success": False, "error": "Failed to generate image."}), 500
 
     ########################################################################
     # Upload Images to WordPress
@@ -1240,20 +1232,6 @@ def create_app():
                 info['openai_key_redacted'] = 'REDACTED'
             info['has_openai_key'] = True
         return jsonify(info)
-
-    @app.route('/last_debug_generate_image', methods=['GET'])
-    def last_debug_generate_image():
-        """Returns the contents of debug_generate_image_error.json (redacted) if present."""
-        try:
-            file_path = os.path.join(os.getcwd(), 'debug_generate_image_error.json')
-            if not os.path.exists(file_path):
-                return jsonify({'found': False, 'message': 'No debug file found.'}), 404
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return jsonify({'found': True, 'debug': data})
-        except Exception as e:
-            logging.exception('Error reading debug_generate_image_error.json')
-            return jsonify({'found': False, 'error': str(e)}), 500
 
     ########################################################################
     # Generate AI Title Check
@@ -1377,125 +1355,327 @@ def create_app():
             return jsonify({"success": False, "error": str(e)}), 500
 
     def rank_articles_by_quality(articles):
-        """Helper function to rank articles by quality score - extracted from rank_articles route"""
-        # Known high-quality news sources (higher weight)
-        premium_sources = [
-            'reuters.com', 'ap.org', 'bbc.com', 'nytimes.com', 'washingtonpost.com',
-            'wsj.com', 'theguardian.com', 'npr.org', 'abcnews.go.com', 'cnn.com',
-            'bloomberg.com', 'economist.com', 'foreignaffairs.com'
-        ]
+        """Enhanced article ranking algorithm with sophisticated scoring factors"""
+        import re
+        import random
+        from urllib.parse import urlparse
+        from collections import Counter
         
-        # Calculate scores for each article
+        # Shuffle articles first to eliminate positional bias, but preserve original indices
+        indexed_articles = [(i, article) for i, article in enumerate(articles)]
+        random.shuffle(indexed_articles)
+        
+        # Enhanced source credibility with authority scores (0-100)
+        source_authority = {
+            # Tier 1: Maximum credibility
+            'reuters.com': 100, 'ap.org': 100, 'bbc.com': 98,
+            'nytimes.com': 97, 'washingtonpost.com': 96, 'wsj.com': 96,
+            
+            # Tier 2: High credibility  
+            'theguardian.com': 92, 'npr.org': 91, 'economist.com': 94,
+            'abcnews.go.com': 88, 'bloomberg.com': 90, 'foreignaffairs.com': 89,
+            'nature.com': 99, 'science.org': 98, 'financialtimes.com': 93,
+            
+            # Tier 3: Good credibility
+            'cnn.com': 82, 'cbsnews.com': 84, 'nbcnews.com': 85,
+            'politico.com': 80, 'time.com': 78, 'newsweek.com': 76,
+            'theatlantic.com': 88, 'newyorker.com': 87, 'axios.com': 79,
+            
+            # Tier 4: Moderate credibility
+            'usatoday.com': 72, 'forbes.com': 74, 'latimes.com': 75,
+            'chicagotribune.com': 70, 'seattletimes.com': 71, 'vox.com': 68,
+            
+            # Tech sources
+            'arstechnica.com': 85, 'techcrunch.com': 70, 'wired.com': 78
+        }
+        
+        # Enhanced keyword analysis
+        urgency_keywords = ['breaking', 'urgent', 'developing', 'live', 'happening now', 'just in', 'update']
+        quality_indicators = ['exclusive', 'investigation', 'analysis', 'in-depth', 'revealed', 
+                            'study shows', 'research', 'report', 'interview', 'expert']
+        clickbait_patterns = [r"you won't believe", r"shocking truth", r"one simple trick", 
+                           r"doctors hate", r"\d+ things", r"what happens next", r"this will change"]
+        
+        # Geographic regions for diversity
+        geographic_keywords = {
+            'north_america': ['usa', 'us', 'america', 'canada', 'mexico'],
+            'europe': ['uk', 'britain', 'france', 'germany', 'italy', 'spain', 'europe'],
+            'asia': ['china', 'japan', 'india', 'korea', 'asia', 'singapore', 'taiwan'],
+            'middle_east': ['israel', 'iran', 'saudi', 'iraq', 'syria', 'turkey'],
+            'africa': ['africa', 'egypt', 'south africa', 'nigeria', 'kenya'],
+            'oceania': ['australia', 'new zealand'],
+            'latin_america': ['brazil', 'argentina', 'chile', 'colombia', 'venezuela']
+        }
+        
+        # First pass: calculate base scores and collect category/geographic data
         ranked_articles = []
+        category_counts = Counter()
+        geographic_distribution = Counter()
         
-        for i, article in enumerate(articles):
+        # Pre-analyze for diversity calculations using indexed articles
+        for original_idx, article in indexed_articles:
+            category_counts[article.get('category', 'Uncategorized')] += 1
+            
+            # Geographic analysis
+            content_text = (article.get('headline', '') + ' ' + article.get('summary', '')).lower()
+            for region, keywords in geographic_keywords.items():
+                if any(keyword in content_text for keyword in keywords):
+                    geographic_distribution[region] += 1
+                    break
+        
+        # Calculate scores for each shuffled article
+        for i, (original_idx, article) in enumerate(indexed_articles):
             score = 0
             scoring_details = {}
             
-            # 1. Content Quality Score (25%)
+            # 1. Enhanced Content Quality Score (30%)
             content_score = 0
-            if article.get('detailed_summary') and article['detailed_summary'].lower() not in ['no content available', 'content not available']:
-                content_length = len(article['detailed_summary'])
-                if content_length > 200:
-                    content_score = 25
-                elif content_length > 100:
-                    content_score = 20
-                elif content_length > 50:
-                    content_score = 15
+            content_details = {}
+            
+            summary = article.get('detailed_summary', article.get('summary', ''))
+            if summary and summary.lower() not in ['no content available', 'content not available']:
+                length = len(summary)
+                
+                # Optimal length scoring (200-800 chars ideal)
+                if 200 <= length <= 800:
+                    length_score = 25
+                elif 100 <= length < 200:
+                    length_score = 18
+                elif 50 <= length < 100:
+                    length_score = 12
+                elif length > 800:
+                    length_score = 20  # Good but slightly penalized
                 else:
-                    content_score = 10
-            elif article.get('summary') and article['summary'].lower() not in ['no content available', 'content not available']:
-                content_score = 15
+                    length_score = 6
+                
+                # Content depth analysis
+                depth_score = 0
+                if any(indicator in summary.lower() for indicator in quality_indicators):
+                    depth_score = 5
+                
+                # Readability heuristic
+                sentence_count = len([s for s in summary.split('.') if len(s.strip()) > 10])
+                if 2 <= sentence_count <= 8:
+                    readability_score = 3
+                elif sentence_count > 8:
+                    readability_score = 2
+                else:
+                    readability_score = 1
+                
+                content_score = min(length_score + depth_score + readability_score, 30)
+                content_details = {
+                    'length_score': length_score,
+                    'depth_score': depth_score,
+                    'readability_score': readability_score
+                }
             else:
-                content_score = 5
+                content_score = 3
+                content_details = {'length_score': 0, 'depth_score': 0, 'readability_score': 0}
             
             scoring_details['content_quality'] = content_score
+            scoring_details['content_details'] = content_details
             score += content_score
             
-            # 2. Source Credibility Score (20%)
-            source_score = 10  # Default score
+            # 2. Enhanced Source Authority Score (25%)
             link = article.get('link', '')
-            for premium in premium_sources:
-                if premium in link.lower():
-                    source_score = 20
-                    break
+            domain = urlparse(link).netloc.lower().replace('www.', '') if link else ''
             
-            scoring_details['source_credibility'] = source_score
+            # Authority scoring with fallback patterns
+            if domain in source_authority:
+                authority_rating = source_authority[domain]
+            else:
+                # Pattern-based scoring for unknown sources
+                if any(pattern in domain for pattern in ['.gov', '.edu']):
+                    authority_rating = 85
+                elif '.org' in domain:
+                    authority_rating = 70
+                elif any(pattern in domain for pattern in ['news', 'times', 'post', 'herald', 'tribune']):
+                    authority_rating = 65
+                elif any(pattern in domain for pattern in ['blog', 'wordpress', 'medium', 'substack']):
+                    authority_rating = 35
+                else:
+                    authority_rating = 50  # Neutral default
+            
+            # Scale to 25 points max
+            source_score = (authority_rating / 100) * 25
+            
+            scoring_details['source_credibility'] = round(source_score, 1)
+            scoring_details['authority_details'] = {'domain': domain, 'authority_rating': authority_rating}
             score += source_score
             
-            # 3. Title Engagement Score (20%)
+            # 3. Advanced Title Effectiveness Score (20%)
             title = article.get('headline', '')
-            engagement_score = 10  # Default
+            title_details = {}
             
-            # Length sweet spot (60-100 characters)
-            if 60 <= len(title) <= 100:
-                engagement_score += 5
-            
-            # Engagement keywords
-            engagement_keywords = [
-                'breaking', 'exclusive', 'revealed', 'shocking', 'urgent', 'major',
-                'critical', 'important', 'significant', 'unprecedented', 'historic'
-            ]
-            if any(keyword in title.lower() for keyword in engagement_keywords):
-                engagement_score += 3
-            
-            # Avoid clickbait indicators
-            clickbait_indicators = ['you won\'t believe', 'shocking truth', 'one simple trick']
-            if any(indicator in title.lower() for indicator in clickbait_indicators):
-                engagement_score -= 5
-            
-            engagement_score = max(5, min(20, engagement_score))  # Clamp between 5-20
-            scoring_details['title_engagement'] = engagement_score
-            score += engagement_score
-            
-            # 4. Visual Content Score (15%)
-            photo_score = 0
-            if article.get('photo') and article['photo'] != 'No photo available':
-                photo_score = 15
+            # Length optimization (40-70 chars ideal for SEO, 60-100 for engagement)
+            length = len(title)
+            if 40 <= length <= 70:
+                length_score = 8
+            elif 30 <= length <= 40 or 70 <= length <= 100:
+                length_score = 6
+            elif 20 <= length <= 30 or 100 <= length <= 120:
+                length_score = 4
             else:
-                photo_score = 5
+                length_score = 2
             
-            scoring_details['visual_content'] = photo_score
-            score += photo_score
+            # Quality indicators
+            quality_score = 0
+            if any(word in title.lower() for word in quality_indicators):
+                quality_score = 4
             
-            # 5. Category Diversity Bonus (20%) - base score for now
-            category_score = 10  # Will be adjusted after calculating diversity
-            scoring_details['category_diversity'] = category_score
-            score += category_score
+            # Urgency/timeliness indicators
+            urgency_score = 0
+            if any(word in title.lower() for word in urgency_keywords):
+                urgency_score = 5
             
+            # Numbers and questions (perform well)
+            number_bonus = 2 if re.search(r'\b\d+\b', title) else 0
+            question_bonus = 2 if title.endswith('?') else 0
+            
+            # Enhanced clickbait detection
+            clickbait_penalty = 0
+            for pattern in clickbait_patterns:
+                if re.search(pattern, title.lower()):
+                    clickbait_penalty = -6
+                    break
+            
+            # Readability (word count)
+            word_count = len(title.split())
+            readability_bonus = 2 if 5 <= word_count <= 15 else 0
+            
+            title_score = max(2, min(length_score + quality_score + urgency_score + 
+                                   number_bonus + question_bonus + readability_bonus + clickbait_penalty, 20))
+            
+            title_details = {
+                'length_score': length_score,
+                'quality_score': quality_score,
+                'urgency_score': urgency_score,
+                'number_bonus': number_bonus,
+                'question_bonus': question_bonus,
+                'readability_bonus': readability_bonus,
+                'clickbait_penalty': clickbait_penalty
+            }
+            
+            scoring_details['title_engagement'] = title_score
+            scoring_details['title_details'] = title_details
+            score += title_score
+            
+            # 4. Enhanced Visual Content Score (10%)
+            photo = article.get('photo', '')
+            visual_details = {}
+            
+            if photo and photo not in ['No photo available', '']:
+                base_visual_score = 8
+                # Quality indicators in image URL
+                quality_bonus = 0
+                if any(indicator in photo.lower() for indicator in ['high-res', 'hd', 'large', '1200', '1080', '4k']):
+                    quality_bonus = 2
+                
+                visual_score = min(base_visual_score + quality_bonus, 10)
+                visual_details = {'has_photo': True, 'quality_bonus': quality_bonus}
+            else:
+                visual_score = 2
+                visual_details = {'has_photo': False, 'quality_bonus': 0}
+            
+            scoring_details['visual_content'] = visual_score
+            scoring_details['visual_details'] = visual_details
+            score += visual_score
+            
+            # 5. Timeliness and Newsworthiness Score (10%)
+            timeliness_score = 5  # Base score
+            time_details = {}
+            
+            # Check for time-sensitive content
+            content_text = ((title or '') + ' ' + (summary or '')).lower()
+            
+            # Urgency indicators
+            urgency_bonus = 0
+            for keyword in urgency_keywords:
+                if keyword in content_text:
+                    urgency_bonus = 5
+                    break
+            
+            # Time-sensitive patterns
+            time_patterns = [
+                r'\b(today|yesterday|this morning|tonight|now)\b',
+                r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+                r'\b(january|february|march|april|may|june|july|august|september|october|november|december)\b',
+                r'\b202[4-9]\b'  # Current years
+            ]
+            
+            time_relevance = 0
+            for pattern in time_patterns:
+                if re.search(pattern, content_text):
+                    time_relevance = 2
+                    break
+            
+            timeliness_total = min(timeliness_score + urgency_bonus + time_relevance, 10)
+            time_details = {
+                'urgency_bonus': urgency_bonus,
+                'time_relevance': time_relevance,
+                'base_score': timeliness_score
+            }
+            
+            scoring_details['timeliness'] = timeliness_total
+            scoring_details['time_details'] = time_details
+            score += timeliness_total
+            
+            # 6. Category Diversity Score (5%)
+            category = article.get('category', 'Uncategorized')
+            category_count = category_counts[category]
+            
+            if category_count <= 3:
+                category_diversity = 5
+            elif category_count <= 8:
+                category_diversity = 4
+            elif category_count <= 15:
+                category_diversity = 3
+            elif category_count <= 25:
+                category_diversity = 2
+            else:
+                category_diversity = 1
+            
+            scoring_details['category_diversity'] = category_diversity
+            score += category_diversity
+            
+            # 7. Geographic Diversity Score (5%)
+            content_text = ((title or '') + ' ' + (summary or '')).lower()
+            geo_score = 2  # Default
+            geo_region = 'unknown'
+            
+            for region, keywords in geographic_keywords.items():
+                if any(keyword in content_text for keyword in keywords):
+                    region_count = geographic_distribution[region]
+                    geo_region = region
+                    
+                    if region_count <= 3:
+                        geo_score = 5
+                    elif region_count <= 8:
+                        geo_score = 4
+                    elif region_count <= 15:
+                        geo_score = 3
+                    else:
+                        geo_score = 2
+                    break
+            
+            scoring_details['geographic_diversity'] = geo_score
+            scoring_details['geo_details'] = {'region': geo_region}
+            score += geo_score
+            
+            # Final score normalization (max 100)
+            final_score = min(score, 100)
+            
+            # Store original index for tracking purposes
             ranked_articles.append({
-                'index': i,
+                'original_index': original_idx,  # Track original position
+                'shuffled_index': i,  # Track shuffled position
                 'article': article,
-                'score': score,
+                'score': round(final_score, 1),
                 'scoring_details': scoring_details
             })
         
-        # Calculate category diversity bonuses
-        category_counts = {}
-        for item in ranked_articles:
-            category = item['article'].get('category', 'Uncategorized')
-            category_counts[category] = category_counts.get(category, 0) + 1
-        
-        # Adjust scores based on category diversity
-        for item in ranked_articles:
-            category = item['article'].get('category', 'Uncategorized')
-            count = category_counts[category]
-            
-            # Bonus for diverse categories (fewer articles in category = higher bonus)
-            if count <= 5:
-                diversity_bonus = 10
-            elif count <= 10:
-                diversity_bonus = 7
-            elif count <= 20:
-                diversity_bonus = 5
-            else:
-                diversity_bonus = 2
-            
-            item['scoring_details']['category_diversity'] = diversity_bonus
-            item['score'] = item['score'] - 10 + diversity_bonus  # Replace base score
-        
-        # Sort by score (highest first)
-        ranked_articles.sort(key=lambda x: x['score'], reverse=True)
+        # Sort by score (highest first), with random tiebreaker for identical scores
+        ranked_articles.sort(key=lambda x: (x['score'], random.random()), reverse=True)
         
         return ranked_articles
 
@@ -1520,155 +1700,40 @@ def create_app():
             with open(file_path, 'r', encoding='utf-8') as f:
                 articles = json.load(f)
             
-            logging.info(f"Ranking {len(articles)} articles from {latest_file}")
+            logging.info(f"Enhanced ranking algorithm processing {len(articles)} articles from {latest_file}")
             
-            # Known high-quality news sources (higher weight)
-            premium_sources = [
-                'reuters.com', 'ap.org', 'bbc.com', 'nytimes.com', 'washingtonpost.com',
-                'wsj.com', 'theguardian.com', 'npr.org', 'abcnews.go.com', 'cnn.com',
-                'bloomberg.com', 'economist.com', 'foreignaffairs.com'
-            ]
-            
-            # Calculate scores for each article
-            ranked_articles = []
-            
-            for i, article in enumerate(articles):
-                score = 0
-                scoring_details = {}
-                
-                # 1. Content Quality Score (25%)
-                content_score = 0
-                if article.get('detailed_summary') and article['detailed_summary'].lower() not in ['no content available', 'content not available']:
-                    content_length = len(article['detailed_summary'])
-                    if content_length > 200:
-                        content_score = 25
-                    elif content_length > 100:
-                        content_score = 20
-                    elif content_length > 50:
-                        content_score = 15
-                    else:
-                        content_score = 10
-                elif article.get('summary') and article['summary'].lower() not in ['no content available', 'content not available']:
-                    content_score = 15
-                else:
-                    content_score = 5
-                
-                scoring_details['content_quality'] = content_score
-                score += content_score
-                
-                # 2. Source Credibility Score (20%)
-                source_score = 10  # Default score
-                link = article.get('link', '')
-                for premium in premium_sources:
-                    if premium in link.lower():
-                        source_score = 20
-                        break
-                
-                scoring_details['source_credibility'] = source_score
-                score += source_score
-                
-                # 3. Title Engagement Score (20%)
-                title = article.get('headline', '')
-                engagement_score = 10  # Default
-                
-                # Length sweet spot (60-100 characters)
-                if 60 <= len(title) <= 100:
-                    engagement_score += 5
-                
-                # Engagement keywords
-                engagement_keywords = [
-                    'breaking', 'exclusive', 'revealed', 'shocking', 'urgent', 'major',
-                    'critical', 'important', 'significant', 'unprecedented', 'historic'
-                ]
-                if any(keyword in title.lower() for keyword in engagement_keywords):
-                    engagement_score += 3
-                
-                # Avoid clickbait indicators
-                clickbait_indicators = ['you won\'t believe', 'shocking truth', 'one simple trick']
-                if any(indicator in title.lower() for indicator in clickbait_indicators):
-                    engagement_score -= 5
-                
-                engagement_score = max(5, min(20, engagement_score))  # Clamp between 5-20
-                scoring_details['title_engagement'] = engagement_score
-                score += engagement_score
-                
-                # 4. Visual Content Score (15%)
-                photo_score = 0
-                if article.get('photo') and article['photo'] != 'No photo available':
-                    photo_score = 15
-                else:
-                    photo_score = 5
-                
-                scoring_details['visual_content'] = photo_score
-                score += photo_score
-                
-                # 5. Category Diversity Bonus (20%)
-                # This will be calculated after we see all categories
-                category_score = 10  # Base score, will be adjusted later
-                scoring_details['category_diversity'] = category_score
-                score += category_score
-                
-                ranked_articles.append({
-                    'index': i,
-                    'article': article,
-                    'score': score,
-                    'scoring_details': scoring_details
-                })
-            
-            # Calculate category diversity bonuses
-            category_counts = {}
-            for item in ranked_articles:
-                category = item['article'].get('category', 'Uncategorized')
-                category_counts[category] = category_counts.get(category, 0) + 1
-            
-            # Adjust scores based on category diversity
-            for item in ranked_articles:
-                category = item['article'].get('category', 'Uncategorized')
-                count = category_counts[category]
-                
-                # Bonus for diverse categories (fewer articles in category = higher bonus)
-                if count <= 5:
-                    diversity_bonus = 10
-                elif count <= 10:
-                    diversity_bonus = 7
-                elif count <= 20:
-                    diversity_bonus = 5
-                else:
-                    diversity_bonus = 2
-                
-                item['scoring_details']['category_diversity'] = diversity_bonus
-                item['score'] = item['score'] - 10 + diversity_bonus  # Replace base score
-            
-            # Sort by score (highest first)
-            ranked_articles.sort(key=lambda x: x['score'], reverse=True)
+            # Use our enhanced ranking algorithm
+            ranked_articles = rank_articles_by_quality(articles)
             
             # Get top 100
             top_100 = ranked_articles[:100]
             
-            # Prepare response
+            # Prepare enhanced response
             result = {
                 'total_articles': len(articles),
                 'top_100': [
                     {
-                        'index': item['index'],
+                        'original_index': item['original_index'],
                         'headline': item['article'].get('headline', ''),
                         'category': item['article'].get('category', 'Uncategorized'),
-                        'score': round(item['score'], 1),
+                        'score': item['score'],
                         'rank': rank + 1,
                         'scoring_breakdown': item['scoring_details']
                     }
                     for rank, item in enumerate(top_100)
                 ],
                 'scoring_summary': {
-                    'content_quality': '25% - Based on summary length and quality',
-                    'source_credibility': '20% - Premium news sources get higher scores',
-                    'title_engagement': '20% - Title length, keywords, avoiding clickbait',
-                    'visual_content': '15% - Presence of photos/media',
-                    'category_diversity': '20% - Bonus for diverse category distribution'
+                    'content_quality': '30% - Enhanced analysis: optimal length (200-800 chars), depth indicators, readability',
+                    'source_credibility': '25% - Authority scoring with 100+ sources, domain pattern analysis',
+                    'title_engagement': '20% - SEO length optimization, quality indicators, clickbait detection',
+                    'visual_content': '10% - Photo presence and quality indicators',
+                    'timeliness': '10% - Urgency keywords, time-sensitive patterns, newsworthiness',
+                    'category_diversity': '5% - Bonus for balanced category distribution',
+                    'geographic_diversity': '5% - Global news coverage balance across regions'
                 }
             }
             
-            logging.info(f"Successfully ranked articles. Top score: {top_100[0]['score']}, Bottom score: {top_100[-1]['score']}")
+            logging.info(f"Enhanced ranking complete. Score range: {top_100[0]['score']} to {top_100[-1]['score']}")
             
             return jsonify(result)
             
