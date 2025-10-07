@@ -1,0 +1,12 @@
+{
+  "wordpress_url": "https://basementcowboy.com",
+  "username": "thebasementcow",
+  "application_password": "LgTw Bd3y UcJy aOZR q9Zr Nd9r",
+  "graphql_endpoint": "https://basementcowboy.com/graphql",
+  "api_version": "graphql",
+  "plugins_required": [
+    "WPGraphQL",
+    "WPGraphQL Upload (optional for media uploads)"
+  ],
+  "notes": "GraphQL endpoint requires WPGraphQL plugin to be installed and activated on WordPress site"
+}

@@ -1,0 +1,39 @@
+{
+  "name": "Basement Cowboy",
+  "version": "1.0.0",
+  "description": "AI-powered news aggregation platform",
+  "created": "2025-10-07T10:34:58.669078",
+  "python_version_required": "3.8+",
+  "setup_instructions": [
+    "1. Run setup script for your platform:",
+    "   Windows: setup-windows.bat",
+    "   Mac/Linux: ./setup-unix.sh",
+    "2. Configure .env file with API keys",
+    "3. Run: python run.py",
+    "4. Open browser to http://localhost:5000"
+  ],
+  "included_files": [
+    "run.py",
+    "requirements.txt",
+    "README.md",
+    "QUICK_START.md",
+    "PRODUCTION_GUIDE.md",
+    "TECHNICAL_BRIEF.md",
+    "SHIPPING_CHECKLIST.md",
+    "WP_ENGINE_QUICK_SETUP.md",
+    "setup-windows.bat",
+    "setup-unix.sh",
+    "system_check.py",
+    "wordpress-template-with-images.php",
+    "app/",
+    "config/",
+    "data/",
+    "scraper/",
+    "tests/",
+    "output/news_articles",
+    "output/logs",
+    "output/wordpress-output",
+    ".env.template",
+    "SHIPPING_INFO.json"
+  ]
+}

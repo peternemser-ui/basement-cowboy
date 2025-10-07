@@ -1,0 +1,12 @@
+{
+  "wordpress_url": "https://your-wordpress-site.com",
+  "username": "your-wp-username",
+  "application_password": "xxxx xxxx xxxx xxxx xxxx xxxx",
+  "graphql_endpoint": "https://your-wordpress-site.com/graphql",
+  "api_version": "rest",
+  "plugins_required": [
+    "WPGraphQL (only if using GraphQL)",
+    "WPGraphQL Upload (optional for media uploads)"
+  ],
+  "notes": "Change api_version to 'graphql' to use GraphQL instead of REST API. Requires WPGraphQL plugin installation."
+}

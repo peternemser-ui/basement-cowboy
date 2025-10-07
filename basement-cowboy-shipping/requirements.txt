@@ -1,0 +1,29 @@
+# Core Flask Framework
+Flask>=3.0.0
+
+# WordPress Integration
+requests>=2.31.0
+python-wordpress-xmlrpc>=2.3
+
+# Web Scraping
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+
+# AI Integration  
+openai>=1.0.0
+
+# Environment & Configuration
+python-dotenv>=1.0.0
+
+# GraphQL Support (Optional - requires WPGraphQL plugin)
+gql[all]>=3.4.1
+graphql-core>=3.2.3
+
+# Security & utility
+markupsafe>=2.1.0
+urllib3>=1.26.0
+
+# Testing Dependencies (for CI/CD)
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
