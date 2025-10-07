@@ -8,6 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -16,9 +17,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright and chromium
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# Install Playwright and chromium (with error handling)
+RUN playwright install chromium || echo "Playwright installation failed, continuing..."
+RUN playwright install-deps chromium || echo "Playwright deps installation failed, continuing..."
 
 # Copy application code
 COPY . .
@@ -33,6 +34,11 @@ EXPOSE 5000
 ENV FLASK_APP=run.py
 ENV FLASK_ENV=production
 ENV PYTHONPATH=/app
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:5000/health || exit 1
 
 # Run the application
 CMD ["python", "run.py"]

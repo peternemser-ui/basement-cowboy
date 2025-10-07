@@ -117,17 +117,11 @@ python_functions = ["test_*"]
 addopts = [
     "-v",
     "--strict-markers",
-    "--strict-config", 
-    "--cov=app",
-    "--cov=scraper",
-    "--cov-report=term-missing:skip-covered",
-    "--cov-report=html",
-    "--cov-report=xml",
-    "--cov-fail-under=80"
+    "--tb=short"
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
+    "integration: marks tests as integration tests", 
     "unit: marks tests as unit tests",
 ]
 

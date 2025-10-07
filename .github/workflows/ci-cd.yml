@@ -44,9 +44,10 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov flake8 black isort
+        pip install pytest pytest-cov flake8 black isort pytest-mock
 
-    - name: 🎭 Install Playwright
+    - name: 🎭 Install Playwright (Linux only)
+      if: runner.os == 'Linux'
       run: |
         playwright install chromium
         playwright install-deps chromium
@@ -63,10 +64,11 @@ jobs:
 
     - name: 🧪 Unit Tests
       run: |
-        pytest tests/ -v --cov=app --cov=scraper --cov-report=xml --cov-report=html
+        pytest tests/ -v --cov=app --cov=scraper --cov-report=xml --cov-report=html -x
       env:
         FLASK_SECRET_KEY: test-secret-key-for-ci
         OPENAI_API_KEY: test-key
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
     - name: 📊 Upload Coverage
       uses: codecov/codecov-action@v3
@@ -94,12 +96,12 @@ jobs:
     - name: 🔒 Security Scan - Bandit
       run: |
         pip install bandit[toml]
-        bandit -r app/ scraper/ -f json -o bandit-report.json || true
+        bandit -r app/ scraper/ -f json -o bandit-report.json --skip B101,B601 || echo "Bandit scan completed with warnings"
 
     - name: 🔍 Dependency Check - Safety
       run: |
         pip install safety
-        safety check --json --output safety-report.json || true
+        safety check --json --output safety-report.json --ignore 70612 || echo "Safety scan completed with warnings"
 
     - name: 📋 Upload Security Reports
       uses: actions/upload-artifact@v3

@@ -60,4 +60,4 @@ jobs:
       if: github.event_name == 'pull_request'
       run: |
         docker build -t test-image .
-        docker run --rm test-image python -c "from app.routes import create_app; print('✅ Image works')"
+        docker run --rm -e FLASK_SECRET_KEY=test-key -e OPENAI_API_KEY=test-key test-image python -c "from app.routes import create_app; print('✅ Image works')"
