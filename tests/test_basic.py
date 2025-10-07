@@ -56,17 +56,17 @@ def test_seo_generator():
         'link': 'https://example.com/test'
     }
     
-    result = seo.generate_meta_tags([test_article])
+    result = seo.generate_meta_tags(test_article)  # Pass single article, not list
     assert 'title' in result
-    assert 'description' in result
+    assert 'meta_description' in result  # Correct key name
 
 @patch('requests.get')
 def test_scraper_imports(mock_get):
     """Test that scraper modules can be imported"""
     try:
         from scraper.fetch_page import fetch_page_content
-        from scraper.parse_articles import parse_articles_from_content
-        from scraper.filter_articles import filter_articles
+        from scraper.parse_articles import parse_articles_from_soup  # Correct function name
+        from scraper.filter_articles import is_valid_news_article  # Correct function name
         assert True
     except ImportError as e:
         pytest.fail(f"Failed to import scraper modules: {e}")
