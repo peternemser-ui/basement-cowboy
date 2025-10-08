@@ -663,32 +663,97 @@
             async regenerateScraper() {
                 this.showLoading('Regenerating scraper...');
                 try {
-                    const response = await axios.post('/api/regenerate_scraper');
-                    if (response.data.success) {
-                        location.reload();
+                    const response = await fetch('/regenerate_scraper', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    });
+                    
+                    if (response.ok) {
+                        // Handle streaming response
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    const data = line.substring(6);
+                                    if (data.startsWith('SUCCESS:')) {
+                                        this.hideLoading();
+                                        alert('Scraper completed successfully!');
+                                        location.reload();
+                                        return;
+                                    } else if (data.startsWith('ERROR:')) {
+                                        this.hideLoading();
+                                        alert('Scraper error: ' + data.substring(6));
+                                        return;
+                                    } else if (data.startsWith('PROGRESS:')) {
+                                        const parts = data.split(':');
+                                        if (parts.length >= 3) {
+                                            const message = parts.slice(2).join(':');
+                                            document.getElementById('loading-message').textContent = message;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } else {
-                        alert('Error regenerating scraper: ' + response.data.error);
+                        throw new Error('Network response was not ok');
                     }
                 } catch (error) {
-                    alert('Error: ' + error.message);
-                } finally {
                     this.hideLoading();
+                    alert('Error: ' + error.message);
                 }
             }
             
             async rankArticles() {
                 this.showLoading('Ranking articles with AI...');
                 try {
-                    const response = await axios.post('/api/rank_articles');
-                    if (response.data.success) {
-                        location.reload();
+                    const response = await fetch('/rank_articles', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.top_100) {
+                            // Auto-select the top 100 ranked articles
+                            this.selectedArticles.clear();
+                            
+                            data.top_100.forEach(item => {
+                                const index = item.original_index;
+                                if (index !== undefined) {
+                                    this.selectedArticles.add(index);
+                                    const checkbox = document.getElementById(`select-${index}`);
+                                    const card = document.querySelector(`[data-index="${index}"]`);
+                                    if (checkbox) checkbox.checked = true;
+                                    if (card) card.classList.add('selected');
+                                }
+                            });
+                            
+                            this.updateStats();
+                            this.updateProgress();
+                            this.hideLoading();
+                            alert(`Successfully ranked and selected top ${data.top_100.length} articles!`);
+                        } else {
+                            throw new Error('Invalid response format');
+                        }
                     } else {
-                        alert('Error ranking articles: ' + response.data.error);
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Network response was not ok');
                     }
                 } catch (error) {
-                    alert('Error: ' + error.message);
-                } finally {
                     this.hideLoading();
+                    alert('Error ranking articles: ' + error.message);
                 }
             }
             
