@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Articles - Basement Cowboy</title>
+    
+    <!-- Primary Styles -->
+    <link href="{{ url_for('static', filename='styles-improved.css') }}" rel="stylesheet">
+    <!-- Bootstrap for compatibility -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        if (window.axios) axios.defaults.withCredentials = true;
+    </script>
+    
+    <style>
+        /* Component-specific styles */
+        .command-center {
+            background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
+            color: var(--color-white);
+            padding: var(--space-8) 0;
+            margin-bottom: var(--space-8);
+        }
+        
+        .command-center h1 {
+            color: var(--color-white);
+            margin-bottom: var(--space-6);
+            font-weight: var(--font-weight-bold);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: var(--font-size-3xl);
+            font-weight: var(--font-weight-bold);
+            margin-bottom: var(--space-2);
+        }
+        
+        .stat-label {
+            font-size: var(--font-size-sm);
+            opacity: 0.9;
+        }
+        
+        .control-panel {
+            background: var(--color-white);
+            border-radius: var(--radius-xl);
+            padding: var(--space-6);
+            box-shadow: var(--shadow-lg);
+            margin-bottom: var(--space-8);
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+            margin-bottom: var(--space-4);
+        }
+        
+        .control-row:last-child {
+            margin-bottom: 0;
+        }
+        
+        .progress-indicator {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .progress-bar-custom {
+            height: 8px;
+            background: var(--color-gray-200);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-success-500), var(--color-success-600));
+            transition: width var(--transition-base);
+            border-radius: var(--radius-full);
+        }
+        
+        .progress-text {
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            margin-bottom: var(--space-2);
+        }
+        
+        .article-grid-improved {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: var(--space-6);
+            padding: var(--space-4);
+        }
+        
+        .article-card-improved {
+            background: var(--color-white);
+            border: 2px solid var(--color-gray-200);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            transition: all var(--transition-base);
+            position: relative;
+        }
+        
+        .article-card-improved:hover {
+            border-color: var(--color-primary-300);
+            box-shadow: var(--shadow-xl);
+            transform: translateY(-4px);
+        }
+        
+        .article-card-improved.selected {
+            border-color: var(--color-primary-500);
+            box-shadow: 0 0 0 4px var(--color-primary-100);
+        }
+        
+        .article-image-improved {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: linear-gradient(135deg, var(--color-gray-200), var(--color-gray-300));
+        }
+        
+        .article-content-improved {
+            padding: var(--space-6);
+        }
+        
+        .article-title-improved {
+            font-size: var(--font-size-lg);
+            font-weight: var(--font-weight-semibold);
+            line-height: var(--line-height-tight);
+            margin-bottom: var(--space-3);
+            color: var(--color-gray-900);
+        }
+        
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            margin-bottom: var(--space-4);
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+            font-size: var(--font-size-xs);
+            color: var(--color-gray-500);
+        }
+        
+        .article-summary-improved {
+            font-size: var(--font-size-sm);
+            line-height: var(--line-height-normal);
+            color: var(--color-gray-600);
+            margin-bottom: var(--space-4);
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .article-actions-improved {
+            display: flex;
+            gap: var(--space-2);
+            flex-wrap: wrap;
+        }
+        
+        .ranking-badge-improved {
+            position: absolute;
+            top: var(--space-4);
+            right: var(--space-4);
+            background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+            color: var(--color-white);
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-bold);
+            padding: var(--space-2) var(--space-3);
+            border-radius: var(--radius-full);
+            box-shadow: var(--shadow-md);
+            z-index: 10;
+        }
+        
+        .selection-checkbox {
+            position: absolute;
+            top: var(--space-4);
+            left: var(--space-4);
+            z-index: 10;
+        }
+        
+        .checkbox-custom {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--color-gray-300);
+            border-radius: var(--radius-base);
+            background: var(--color-white);
+            cursor: pointer;
+            position: relative;
+            transition: all var(--transition-fast);
+        }
+        
+        .checkbox-custom:checked {
+            background: var(--color-primary-600);
+            border-color: var(--color-primary-600);
+        }
+        
+        .checkbox-custom:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--color-white);
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .filter-bar {
+            background: var(--color-white);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-6);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-gray-200);
+        }
+        
+        .filter-row {
+            display: flex;
+            align-items: center;
+            gap: var(--space-4);
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+        
+        .filter-label {
+            font-size: var(--font-size-sm);
+            font-weight: var(--font-weight-medium);
+            color: var(--color-gray-700);
+        }
+        
+        /* Loading states */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: var(--z-modal);
+            backdrop-filter: blur(4px);
+        }
+        
+        .loading-spinner {
+            background: var(--color-white);
+            padding: var(--space-8);
+            border-radius: var(--radius-xl);
+            text-align: center;
+            box-shadow: var(--shadow-xl);
+        }
+        
+        .spinner-large {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--color-gray-200);
+            border-top-color: var(--color-primary-600);
+            margin: 0 auto var(--space-4);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .command-center {
+                padding: var(--space-6) 0;
+            }
+            
+            .control-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .article-grid-improved {
+                grid-template-columns: 1fr;
+                padding: var(--space-2);
+            }
+            
+            .filter-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Command Center Header -->
+    <header class="command-center">
+        <div class="container">
+            <h1><i class="fas fa-newspaper"></i> News Command Center</h1>
+            
+            <!-- Statistics Dashboard -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-articles">{{ articles|length }}</div>
+                    <div class="stat-label">Total Articles</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="selected-count">0</div>
+                    <div class="stat-label">Selected</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="images-count">{{ images_count|default(0) }}</div>
+                    <div class="stat-label">With Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="blank-count">{{ blank_count|default(0) }}</div>
+                    <div class="stat-label">Need Content</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Control Panel -->
+    <div class="container">
+        <div class="control-panel">
+            <!-- Progress Indicator -->
+            <div class="control-row">
+                <div class="progress-indicator">
+                    <div class="progress-text">
+                        <span id="progress-status">Select at least 100 articles to proceed</span>
+                    </div>
+                    <div class="progress-bar-custom">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="control-row">
+                <div class="flex gap-4 flex-wrap">
+                    <button id="regenerate-scraper-btn" class="btn btn-primary">
+                        <i class="fas fa-sync-alt"></i>
+                        Regenerate Scraper
+                    </button>
+                    
+                    <button id="select-all-btn" class="btn btn-secondary">
+                        <i class="fas fa-check-square"></i>
+                        Select All for Publish
+                    </button>
+                    
+                    <button id="rank-articles-btn" class="btn btn-info">
+                        <i class="fas fa-star"></i>
+                        Rank Top 100
+                    </button>
+                    
+                    <button id="review-selected-btn" class="btn btn-success" disabled>
+                        <i class="fas fa-eye"></i>
+                        Review Selected Articles
+                    </button>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-secondary btn-sm" onclick="window.location.href='/'">
+                        <i class="fas fa-home"></i>
+                        Back to Home
+                    </button>
+                    
+                    <button class="btn btn-danger btn-sm" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label class="filter-label" for="file-select">Data File:</label>
+                    <select id="file-select" class="form-control" style="width: auto;">
+                        {% for file in available_files %}
+                        <option value="{{ file }}" {% if file == selected_file %}selected{% endif %}>{{ file }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <input type="checkbox" id="show-only-selected" class="checkbox-custom">
+                        Show only selected
+                    </label>
+                </div>
+                
+                <div class="filter-group">
+                    <label class="filter-label">
+                        <input type="checkbox" id="show-only-images" class="checkbox-custom">
+                        Show only with images
+                    </label>
+                </div>
+                
+                <div class="filter-group">
+                    <label class="filter-label" for="sort-select">Sort by:</label>
+                    <select id="sort-select" class="form-control" style="width: auto;">
+                        <option value="title">Title</option>
+                        <option value="ranking">Ranking</option>
+                        <option value="date">Date</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Articles Grid -->
+        <div class="article-grid-improved" id="articles-container">
+            {% for article in articles %}
+            <article class="article-card-improved" data-index="{{ loop.index0 }}">
+                <!-- Selection Checkbox -->
+                <input type="checkbox" 
+                       class="selection-checkbox checkbox-custom" 
+                       id="select-{{ loop.index0 }}"
+                       data-index="{{ loop.index0 }}">
+                
+                <!-- Ranking Badge -->
+                {% if article.ai_ranking %}
+                <div class="ranking-badge-improved">
+                    #{{ article.ai_ranking }}
+                </div>
+                {% endif %}
+                
+                <!-- Article Image -->
+                {% if article.image_url %}
+                <img src="{{ article.image_url }}" 
+                     alt="{{ article.title[:50] }}..." 
+                     class="article-image-improved"
+                     loading="lazy">
+                {% else %}
+                <div class="article-image-improved" style="background: var(--color-gray-200); display: flex; align-items: center; justify-content: center; color: var(--color-gray-500);">
+                    <i class="fas fa-image fa-2x"></i>
+                </div>
+                {% endif %}
+                
+                <!-- Article Content -->
+                <div class="article-content-improved">
+                    <h3 class="article-title-improved">{{ article.title }}</h3>
+                    
+                    <!-- Meta Information -->
+                    <div class="article-meta">
+                        {% if article.source %}
+                        <div class="meta-item">
+                            <i class="fas fa-globe"></i>
+                            <span>{{ article.source }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if article.category %}
+                        <div class="meta-item">
+                            <i class="fas fa-tag"></i>
+                            <span>{{ article.category }}</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if article.published_at %}
+                        <div class="meta-item">
+                            <i class="fas fa-clock"></i>
+                            <span>{{ article.published_at[:10] }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Summary -->
+                    {% if article.summary %}
+                    <p class="article-summary-improved">{{ article.summary }}</p>
+                    {% else %}
+                    <p class="article-summary-improved" style="color: var(--color-gray-400); font-style: italic;">
+                        No summary available - enhance with AI to generate content
+                    </p>
+                    {% endif %}
+                    
+                    <!-- Actions -->
+                    <div class="article-actions-improved">
+                        <a href="{{ url_for('details', index=loop.index0, file=selected_file) }}" 
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-edit"></i>
+                            Enhance
+                        </a>
+                        
+                        {% if article.url %}
+                        <a href="{{ article.url }}" 
+                           target="_blank" 
+                           class="btn btn-secondary btn-sm">
+                            <i class="fas fa-external-link-alt"></i>
+                            Source
+                        </a>
+                        {% endif %}
+                        
+                        <button class="btn btn-info btn-sm" 
+                                onclick="previewArticle({{ loop.index0 }})">
+                            <i class="fas fa-eye"></i>
+                            Preview
+                        </button>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner spinner-large"></div>
+            <h3>Processing...</h3>
+            <p id="loading-message">Please wait while we process your request</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Enhanced article selection and management
+        class ArticleManager {
+            constructor() {
+                this.selectedArticles = new Set();
+                this.articles = {{ articles|tojson }};
+                this.init();
+            }
+            
+            init() {
+                this.bindEvents();
+                this.updateStats();
+                this.updateProgress();
+            }
+            
+            bindEvents() {
+                // Selection checkboxes
+                document.querySelectorAll('.selection-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', (e) => {
+                        this.toggleSelection(parseInt(e.target.dataset.index));
+                    });
+                });
+                
+                // Action buttons
+                document.getElementById('select-all-btn').addEventListener('click', () => {
+                    this.selectAll();
+                });
+                
+                document.getElementById('regenerate-scraper-btn').addEventListener('click', () => {
+                    this.regenerateScraper();
+                });
+                
+                document.getElementById('rank-articles-btn').addEventListener('click', () => {
+                    this.rankArticles();
+                });
+                
+                document.getElementById('review-selected-btn').addEventListener('click', () => {
+                    this.reviewSelected();
+                });
+                
+                // File selection
+                document.getElementById('file-select').addEventListener('change', (e) => {
+                    this.changeFile(e.target.value);
+                });
+                
+                // Filters
+                document.getElementById('show-only-selected').addEventListener('change', () => {
+                    this.applyFilters();
+                });
+                
+                document.getElementById('show-only-images').addEventListener('change', () => {
+                    this.applyFilters();
+                });
+                
+                document.getElementById('sort-select').addEventListener('change', () => {
+                    this.applySort();
+                });
+            }
+            
+            toggleSelection(index) {
+                const checkbox = document.getElementById(`select-${index}`);
+                const card = document.querySelector(`[data-index="${index}"]`);
+                
+                if (checkbox.checked) {
+                    this.selectedArticles.add(index);
+                    card.classList.add('selected');
+                } else {
+                    this.selectedArticles.delete(index);
+                    card.classList.remove('selected');
+                }
+                
+                this.updateStats();
+                this.updateProgress();
+            }
+            
+            selectAll() {
+                const checkboxes = document.querySelectorAll('.selection-checkbox');
+                checkboxes.forEach((checkbox, index) => {
+                    checkbox.checked = true;
+                    this.selectedArticles.add(index);
+                    document.querySelector(`[data-index="${index}"]`).classList.add('selected');
+                });
+                
+                this.updateStats();
+                this.updateProgress();
+            }
+            
+            updateStats() {
+                document.getElementById('selected-count').textContent = this.selectedArticles.size;
+            }
+            
+            updateProgress() {
+                const selectedCount = this.selectedArticles.size;
+                const progressFill = document.getElementById('progress-fill');
+                const progressStatus = document.getElementById('progress-status');
+                const reviewBtn = document.getElementById('review-selected-btn');
+                
+                let percentage = Math.min((selectedCount / 100) * 100, 100);
+                progressFill.style.width = `${percentage}%`;
+                
+                if (selectedCount < 100) {
+                    progressStatus.textContent = `Select ${100 - selectedCount} more articles to proceed`;
+                    reviewBtn.disabled = true;
+                    reviewBtn.classList.remove('btn-success');
+                    reviewBtn.classList.add('btn-secondary');
+                } else {
+                    progressStatus.textContent = `${selectedCount} articles selected - Ready to proceed!`;
+                    reviewBtn.disabled = false;
+                    reviewBtn.classList.remove('btn-secondary');
+                    reviewBtn.classList.add('btn-success');
+                }
+            }
+            
+            showLoading(message = 'Processing...') {
+                document.getElementById('loading-message').textContent = message;
+                document.getElementById('loading-overlay').style.display = 'flex';
+            }
+            
+            hideLoading() {
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+            
+            async regenerateScraper() {
+                this.showLoading('Regenerating scraper...');
+                try {
+                    const response = await axios.post('/api/regenerate_scraper');
+                    if (response.data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error regenerating scraper: ' + response.data.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                } finally {
+                    this.hideLoading();
+                }
+            }
+            
+            async rankArticles() {
+                this.showLoading('Ranking articles with AI...');
+                try {
+                    const response = await axios.post('/api/rank_articles');
+                    if (response.data.success) {
+                        location.reload();
+                    } else {
+                        alert('Error ranking articles: ' + response.data.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                } finally {
+                    this.hideLoading();
+                }
+            }
+            
+            reviewSelected() {
+                if (this.selectedArticles.size < 100) {
+                    alert('Please select at least 100 articles to proceed.');
+                    return;
+                }
+                
+                const selectedIndices = Array.from(this.selectedArticles);
+                const params = new URLSearchParams();
+                params.append('selected_indices', selectedIndices.join(','));
+                params.append('file', document.getElementById('file-select').value);
+                
+                window.location.href = `/details?${params.toString()}`;
+            }
+            
+            changeFile(filename) {
+                window.location.href = `/review?file=${filename}`;
+            }
+            
+            applyFilters() {
+                const showOnlySelected = document.getElementById('show-only-selected').checked;
+                const showOnlyImages = document.getElementById('show-only-images').checked;
+                
+                document.querySelectorAll('.article-card-improved').forEach(card => {
+                    const index = parseInt(card.dataset.index);
+                    const hasImage = card.querySelector('.article-image-improved img') !== null;
+                    const isSelected = this.selectedArticles.has(index);
+                    
+                    let show = true;
+                    
+                    if (showOnlySelected && !isSelected) {
+                        show = false;
+                    }
+                    
+                    if (showOnlyImages && !hasImage) {
+                        show = false;
+                    }
+                    
+                    card.style.display = show ? 'block' : 'none';
+                });
+            }
+            
+            applySort() {
+                const sortBy = document.getElementById('sort-select').value;
+                const container = document.getElementById('articles-container');
+                const articles = Array.from(container.children);
+                
+                articles.sort((a, b) => {
+                    const indexA = parseInt(a.dataset.index);
+                    const indexB = parseInt(b.dataset.index);
+                    const articleA = this.articles[indexA];
+                    const articleB = this.articles[indexB];
+                    
+                    switch (sortBy) {
+                        case 'title':
+                            return articleA.title.localeCompare(articleB.title);
+                        case 'ranking':
+                            return (articleA.ai_ranking || 999) - (articleB.ai_ranking || 999);
+                        case 'date':
+                            return new Date(articleB.published_at || 0) - new Date(articleA.published_at || 0);
+                        default:
+                            return 0;
+                    }
+                });
+                
+                articles.forEach(article => container.appendChild(article));
+            }
+        }
+        
+        // Additional utility functions
+        function previewArticle(index) {
+            const article = articleManager.articles[index];
+            const modal = new bootstrap.Modal(document.getElementById('previewModal') || createPreviewModal());
+            
+            // Populate modal with article data
+            document.getElementById('previewTitle').textContent = article.title;
+            document.getElementById('previewContent').innerHTML = `
+                <p><strong>Source:</strong> ${article.source || 'Unknown'}</p>
+                <p><strong>URL:</strong> <a href="${article.url}" target="_blank">${article.url}</a></p>
+                <p><strong>Summary:</strong></p>
+                <p>${article.summary || 'No summary available'}</p>
+            `;
+            
+            modal.show();
+        }
+        
+        function createPreviewModal() {
+            const modalHTML = `
+                <div class="modal fade" id="previewModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="previewTitle">Article Preview</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body" id="previewContent">
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            return document.getElementById('previewModal');
+        }
+        
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
+        
+        // Initialize the application
+        const articleManager = new ArticleManager();
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key) {
+                    case 'a':
+                        e.preventDefault();
+                        articleManager.selectAll();
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        articleManager.regenerateScraper();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
