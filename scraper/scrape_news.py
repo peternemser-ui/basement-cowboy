@@ -7,6 +7,10 @@ from datetime import datetime
 from dotenv import load_dotenv
 from hashlib import sha256
 from urllib.parse import urljoin
+import urllib3
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -22,15 +26,63 @@ OUTPUT_DIR = "output/news_articles"
 def fetch_with_retries(url, retries=3):
     """Fetch the URL with retries and headers to mimic a browser."""
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1"
     }
+    
+    # Skip known problematic sites
+    problematic_domains = [
+        'cubadebate.cu',  # Known to forcibly close connections
+        'granma.cu',      # Cuban sites often block international access
+        'prensa-latina.cu',
+        'energyandmines.com'  # SSL handshake issues
+    ]
+    
+    if any(domain in url for domain in problematic_domains):
+        logging.info(f"Skipping known problematic site: {url}")
+        return None
+    
     for attempt in range(retries):
         try:
-            response = requests.get(url, headers=headers, timeout=10)
+            # Try with SSL verification first
+            response = requests.get(url, headers=headers, timeout=15, verify=True)
             response.raise_for_status()
             return response
+        except requests.exceptions.SSLError as e:
+            if "handshake failure" in str(e).lower() or "ssl" in str(e).lower():
+                logging.info(f"SSL handshake failure for {url} - trying without SSL verification")
+                try:
+                    # Retry without SSL verification for problematic SSL sites
+                    response = requests.get(url, headers=headers, timeout=15, verify=False)
+                    response.raise_for_status()
+                    return response
+                except Exception as ssl_retry_e:
+                    logging.warning(f"Failed even without SSL verification for {url}: {ssl_retry_e}")
+                    break  # Don't retry SSL failures
+            else:
+                logging.warning(f"SSL error for {url} (attempt {attempt + 1}/{retries}): {e}")
+        except requests.exceptions.ConnectionError as e:
+            if "forcibly closed" in str(e) or "10054" in str(e):
+                logging.info(f"Connection forcibly closed by {url} - likely geo-blocked or anti-bot")
+                break  # Don't retry for this type of error
+            logging.warning(f"Connection error for {url} (attempt {attempt + 1}/{retries}): {e}")
+        except requests.exceptions.Timeout as e:
+            logging.warning(f"Timeout fetching {url} (attempt {attempt + 1}/{retries}): {e}")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code in [403, 401, 429]:
+                logging.info(f"Access denied for {url} (HTTP {e.response.status_code}) - skipping")
+                break  # Don't retry for access denied errors
+            logging.warning(f"HTTP error fetching {url} (attempt {attempt + 1}/{retries}): {e}")
         except requests.exceptions.RequestException as e:
-            logging.warning(f"Error fetching {url} (attempt {attempt + 1}/{retries}): {e}")
+            logging.warning(f"Request error fetching {url} (attempt {attempt + 1}/{retries}): {e}")
+        except Exception as e:
+            logging.warning(f"Unexpected error fetching {url} (attempt {attempt + 1}/{retries}): {e}")
+            if attempt == retries - 1:
+                logging.error(f"Failed to fetch {url} after {retries} attempts due to unexpected error")
     return None
 
 def is_valid_news_article(headline, link):
@@ -161,8 +213,12 @@ def fetch_article_details(url):
                     continue
                 
                 # Prefer images with 'article', 'story', or large dimensions
-                if any(good in img_src.lower() for good in ['article', 'story', 'news']) or \
-                   (img.get('width') and int(img.get('width', '0')) > 300):
+                try:
+                    width = int(img.get('width', '0'))
+                except (ValueError, TypeError):
+                    width = 0
+                
+                if any(good in img_src.lower() for good in ['article', 'story', 'news']) or width > 300:
                     if not img_src.startswith(('http://', 'https://')):
                         img_src = urljoin(url, img_src)
                     image_url = img_src
@@ -224,32 +280,36 @@ def scrape_site(url):
         link_count = 0
 
         for link in soup.find_all('a', href=True):
-            link_count += 1
-            headline = link.get_text(strip=True)
-            href = link['href']
+            try:
+                link_count += 1
+                headline = link.get_text(strip=True)
+                href = link['href']
 
-            if headline and href:
-                # Make relative URLs absolute
-                if not href.startswith(('http://', 'https://')):
-                    from urllib.parse import urljoin
-                    href = urljoin(url, href)
-                
-                if is_valid_news_article(headline, href):
-                    unique_hash = sha256((headline + href).encode()).hexdigest()
-                    if unique_hash not in seen_hashes:
-                        seen_hashes.add(unique_hash)
-                        logging.debug(f"Valid article found: {headline[:50]}...")
-                        article_details = fetch_article_details(href)
-                        articles.append({
-                            "headline": headline,
-                            "link": href,
-                            "summary": summarize_article(headline),
-                            "detailed_summary": article_details.get("detailed_summary"),
-                            "photo": article_details.get("photo"),
-                            "category": "Uncategorized"
-                        })
-                else:
-                    logging.debug(f"Article filtered out: {headline[:30]}...")
+                if headline and href:
+                    # Make relative URLs absolute
+                    if not href.startswith(('http://', 'https://')):
+                        from urllib.parse import urljoin
+                        href = urljoin(url, href)
+                    
+                    if is_valid_news_article(headline, href):
+                        unique_hash = sha256((headline + href).encode()).hexdigest()
+                        if unique_hash not in seen_hashes:
+                            seen_hashes.add(unique_hash)
+                            logging.debug(f"Valid article found: {headline[:50]}...")
+                            article_details = fetch_article_details(href)
+                            articles.append({
+                                "headline": headline,
+                                "link": href,
+                                "summary": summarize_article(headline),
+                                "detailed_summary": article_details.get("detailed_summary"),
+                                "photo": article_details.get("photo"),
+                                "category": "Uncategorized"
+                            })
+                    else:
+                        logging.debug(f"Article filtered out: {headline[:30]}...")
+            except Exception as e:
+                logging.debug(f"Error processing link: {e}")
+                continue  # Skip problematic links
         
         logging.info(f"Processed {link_count} links, found {len(articles)} valid articles from {url}")
         return articles
@@ -259,57 +319,91 @@ def scrape_site(url):
 
 def scrape_news_sites():
     """Main function to scrape all news sites."""
-    if not os.path.exists(SOURCE_FILE):
-        logging.error(f"Source file not found: {SOURCE_FILE}")
-        return
+    try:
+        if not os.path.exists(SOURCE_FILE):
+            logging.error(f"Source file not found: {SOURCE_FILE}")
+            return
 
-    with open(SOURCE_FILE, 'r') as file:
-        news_sites = [line.strip() for line in file.read().splitlines() if line.strip() and not line.strip().startswith('#')]
-    
-    logging.info(f"Found {len(news_sites)} active news sites to scrape")
-    all_articles = []
-    seen_urls = set()
-
-    for site in news_sites:
-        logging.info(f"Processing site: {site}")
-        articles = scrape_site(site)
-        logging.info(f"Found {len(articles)} articles from {site}")
-        for article in articles:
-            if article["link"] not in seen_urls:
-                seen_urls.add(article["link"])
-                all_articles.append(article)
+        with open(SOURCE_FILE, 'r') as file:
+            news_sites = [line.strip() for line in file.read().splitlines() if line.strip() and not line.strip().startswith('#')]
         
-    logging.info(f"Total unique articles collected: {len(all_articles)}")
+        logging.info(f"Found {len(news_sites)} active news sites to scrape")
+        all_articles = []
+        seen_urls = set()
+        sites_processed = 0
+        sites_failed = 0
 
-    if all_articles:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        for site in news_sites:
+            try:
+                logging.info(f"Processing site {sites_processed + 1}/{len(news_sites)}: {site}")
+                articles = scrape_site(site)
+                
+                if articles:
+                    logging.info(f"SUCCESS: Found {len(articles)} articles from {site}")
+                    for article in articles:
+                        if article["link"] not in seen_urls:
+                            seen_urls.add(article["link"])
+                            all_articles.append(article)
+                    sites_processed += 1
+                else:
+                    logging.warning(f"No articles found from {site}")
+                    sites_failed += 1
+                
+                # Save progress every 10 sites
+                if (sites_processed + sites_failed) % 10 == 0:
+                    success_rate = (sites_processed / (sites_processed + sites_failed)) * 100 if (sites_processed + sites_failed) > 0 else 0
+                    logging.info(f"Progress: {sites_processed + sites_failed}/{len(news_sites)} sites processed, {len(all_articles)} articles collected, {success_rate:.1f}% success rate")
+                    
+            except Exception as e:
+                logging.error(f"ERROR: Failed to scrape {site}: {e}")
+                sites_failed += 1
+                continue  # Skip to next site instead of failing completely
+            
+        final_success_rate = (sites_processed / len(news_sites)) * 100 if len(news_sites) > 0 else 0
+        logging.info(f"Scraping complete: {sites_processed}/{len(news_sites)} sites successful ({final_success_rate:.1f}% success rate)")
+        logging.info(f"Total unique articles collected: {len(all_articles)}")
 
-        # Generate a serialized file name
-        today = datetime.now().strftime("%Y-%m-%d")
-        base_file_name = f"news_articles_{today}"
-        existing_files = [
-            f for f in os.listdir(OUTPUT_DIR)
-            if f.startswith(base_file_name) and f.endswith('.json')
-        ]
-        if existing_files:
-            # Extract existing suffixes
-            suffixes = [
-                int(f.split('-')[-1].split('.')[0]) for f in existing_files if '-' in f
+        if all_articles:
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+            # Generate a serialized file name
+            today = datetime.now().strftime("%Y-%m-%d")
+            base_file_name = f"news_articles_{today}"
+            existing_files = [
+                f for f in os.listdir(OUTPUT_DIR)
+                if f.startswith(base_file_name) and f.endswith('.json')
             ]
-            suffix = max(suffixes) + 1
-        else:
-            suffix = 1
+            if existing_files:
+                # Extract existing suffixes
+                suffixes = []
+                for f in existing_files:
+                    if '-' in f:
+                        try:
+                            suffix_str = f.split('-')[-1].split('.')[0]
+                            suffixes.append(int(suffix_str))
+                        except (ValueError, IndexError):
+                            continue
+                suffix = max(suffixes) + 1 if suffixes else 1
+            else:
+                suffix = 1
 
-        output_file = os.path.join(OUTPUT_DIR, f"{base_file_name}-{suffix}.json")
-        
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(all_articles, f, ensure_ascii=False, indent=4)
-            logging.info(f"Scraping complete. Articles saved to {output_file}")
-        except IOError as e:
-            logging.error(f"Failed to save JSON file: {e}")
-    else:
-        logging.warning("No articles found. Nothing to save.")
+            output_file = os.path.join(OUTPUT_DIR, f"{base_file_name}-{suffix}.json")
+            
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(all_articles, f, ensure_ascii=False, indent=4)
+                logging.info(f"SUCCESS: Articles saved to {output_file}")
+                return output_file
+            except IOError as e:
+                logging.error(f"FAILED: Could not save JSON file: {e}")
+                return None
+        else:
+            logging.warning("No articles found. Nothing to save.")
+            return None
+            
+    except Exception as e:
+        logging.error(f"CRITICAL ERROR in scrape_news_sites: {e}")
+        return None
 
 if __name__ == "__main__":
     scrape_news_sites()

@@ -24,13 +24,13 @@
         .command-center {
             background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
             color: var(--color-white);
-            padding: var(--space-8) 0;
-            margin-bottom: var(--space-8);
+            padding: var(--space-4) 0;
+            margin-bottom: var(--space-6);
         }
         
         .command-center h1 {
             color: var(--color-white);
-            margin-bottom: var(--space-6);
+            margin-bottom: var(--space-4);
             font-weight: var(--font-weight-bold);
         }
         
@@ -108,8 +108,8 @@
         
         .article-grid-improved {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: var(--space-6);
+            grid-template-columns: repeat(5, 1fr);
+            gap: var(--space-4);
             padding: var(--space-4);
         }
         
@@ -120,6 +120,9 @@
             overflow: hidden;
             transition: all var(--transition-base);
             position: relative;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
         }
         
         .article-card-improved:hover {
@@ -135,9 +138,10 @@
         
         .article-image-improved {
             width: 100%;
-            height: 200px;
+            height: 160px;
             object-fit: cover;
             background: linear-gradient(135deg, var(--color-gray-200), var(--color-gray-300));
+            flex-shrink: 0;
         }
         
         .article-content-improved {
@@ -155,8 +159,9 @@
         .article-meta {
             display: flex;
             align-items: center;
-            gap: var(--space-3);
-            margin-bottom: var(--space-4);
+            gap: var(--space-2);
+            margin-bottom: var(--space-2);
+            flex-wrap: wrap;
         }
         
         .meta-item {
@@ -294,7 +299,7 @@
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .command-center {
-                padding: var(--space-6) 0;
+                padding: var(--space-3) 0;
             }
             
             .control-row {
@@ -306,6 +311,19 @@
                 grid-template-columns: 1fr;
                 padding: var(--space-2);
             }
+        }
+        
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .article-grid-improved {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (min-width: 1025px) and (max-width: 1400px) {
+            .article-grid-improved {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
             
             .filter-row {
                 flex-direction: column;
@@ -362,7 +380,12 @@
                 <div class="flex gap-4 flex-wrap">
                     <button id="regenerate-scraper-btn" class="btn btn-primary">
                         <i class="fas fa-sync-alt"></i>
-                        Regenerate Scraper
+                        Quick Scraper (5 Sites)
+                    </button>
+                    
+                    <button id="regenerate-full-scraper-btn" class="btn btn-warning">
+                        <i class="fas fa-globe"></i>
+                        Full Scraper (100 Sites)
                     </button>
                     
                     <button id="select-all-btn" class="btn btn-secondary">
@@ -401,7 +424,7 @@
                 <div class="filter-group">
                     <label class="filter-label" for="file-select">Data File:</label>
                     <select id="file-select" class="form-control" style="width: auto;">
-                        {% for file in available_files %}
+                        {% for file in files %}
                         <option value="{{ file }}" {% if file == selected_file %}selected{% endif %}>{{ file }}</option>
                         {% endfor %}
                     </select>
@@ -450,20 +473,21 @@
                 {% endif %}
                 
                 <!-- Article Image -->
-                {% if article.image_url %}
-                <img src="{{ article.image_url }}" 
-                     alt="{{ article.title[:50] }}..." 
+                {% if article.photo and article.photo.strip() %}
+                <img src="{{ article.photo }}" 
+                     alt="{{ article.headline[:50] }}..." 
                      class="article-image-improved"
-                     loading="lazy">
+                     loading="lazy"
+                     onerror="this.onerror=null; this.src='{{ url_for('static', filename='default.jpg') }}';">
                 {% else %}
-                <div class="article-image-improved" style="background: var(--color-gray-200); display: flex; align-items: center; justify-content: center; color: var(--color-gray-500);">
-                    <i class="fas fa-image fa-2x"></i>
-                </div>
+                <img src="{{ url_for('static', filename='default.jpg') }}" 
+                     alt="Default image" 
+                     class="article-image-improved">
                 {% endif %}
                 
                 <!-- Article Content -->
                 <div class="article-content-improved">
-                    <h3 class="article-title-improved">{{ article.title }}</h3>
+                    <h3 class="article-title-improved">{{ article.headline }}</h3>
                     
                     <!-- Meta Information -->
                     <div class="article-meta">
@@ -499,26 +523,23 @@
                     {% endif %}
                     
                     <!-- Actions -->
-                    <div class="article-actions-improved">
+                    <div class="article-card-actions">
                         <a href="{{ url_for('details', index=loop.index0, file=selected_file) }}" 
                            class="btn btn-primary btn-sm">
-                            <i class="fas fa-edit"></i>
-                            Enhance
+                            Edit
                         </a>
                         
-                        {% if article.url %}
-                        <a href="{{ article.url }}" 
+                        {% if article.link %}
+                        <a href="{{ article.link }}" 
                            target="_blank" 
                            class="btn btn-secondary btn-sm">
-                            <i class="fas fa-external-link-alt"></i>
                             Source
                         </a>
                         {% endif %}
                         
                         <button class="btn btn-info btn-sm" 
                                 onclick="previewArticle({{ loop.index0 }})">
-                            <i class="fas fa-eye"></i>
-                            Preview
+                            View
                         </button>
                     </div>
                 </div>
@@ -568,6 +589,10 @@
                 
                 document.getElementById('regenerate-scraper-btn').addEventListener('click', () => {
                     this.regenerateScraper();
+                });
+                
+                document.getElementById('regenerate-full-scraper-btn').addEventListener('click', () => {
+                    this.regenerateFullScraper();
                 });
                 
                 document.getElementById('rank-articles-btn').addEventListener('click', () => {
@@ -713,6 +738,59 @@
                 }
             }
             
+            async regenerateFullScraper() {
+                try {
+                    this.showLoading('Starting full scraper (100 sites)...');
+                    
+                    const response = await fetch('/regenerate_full_scraper', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    const data = line.substring(6);
+                                    if (data.startsWith('SUCCESS:')) {
+                                        this.hideLoading();
+                                        alert('Full scraper completed successfully!');
+                                        location.reload();
+                                        return;
+                                    } else if (data.startsWith('ERROR:')) {
+                                        this.hideLoading();
+                                        alert('Full scraper error: ' + data.substring(6));
+                                        return;
+                                    } else if (data.startsWith('PROGRESS:')) {
+                                        const parts = data.split(':');
+                                        if (parts.length >= 3) {
+                                            const message = parts.slice(2).join(':');
+                                            document.getElementById('loading-message').textContent = message;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        throw new Error('Network response was not ok');
+                    }
+                } catch (error) {
+                    this.hideLoading();
+                    alert('Error: ' + error.message);
+                }
+            }
+            
             async rankArticles() {
                 this.showLoading('Ranking articles with AI...');
                 try {
@@ -758,6 +836,9 @@
             }
             
             reviewSelected() {
+                console.log('DEBUG: reviewSelected() called');
+                console.log('DEBUG: selectedArticles.size =', this.selectedArticles.size);
+                
                 if (this.selectedArticles.size < 100) {
                     alert('Please select at least 100 articles to proceed.');
                     return;
@@ -768,7 +849,12 @@
                 params.append('selected_indices', selectedIndices.join(','));
                 params.append('file', document.getElementById('file-select').value);
                 
-                window.location.href = `/details?${params.toString()}`;
+                const finalUrl = `/details?${params.toString()}`;
+                console.log('DEBUG: Navigating to URL:', finalUrl);
+                console.log('DEBUG: Selected indices count:', selectedIndices.length);
+                console.log('DEBUG: First 10 indices:', selectedIndices.slice(0, 10));
+                
+                window.location.href = finalUrl;
             }
             
             changeFile(filename) {
@@ -831,10 +917,10 @@
             const modal = new bootstrap.Modal(document.getElementById('previewModal') || createPreviewModal());
             
             // Populate modal with article data
-            document.getElementById('previewTitle').textContent = article.title;
+            document.getElementById('previewTitle').textContent = article.headline;
             document.getElementById('previewContent').innerHTML = `
                 <p><strong>Source:</strong> ${article.source || 'Unknown'}</p>
-                <p><strong>URL:</strong> <a href="${article.url}" target="_blank">${article.url}</a></p>
+                <p><strong>URL:</strong> <a href="${article.link}" target="_blank">${article.link}</a></p>
                 <p><strong>Summary:</strong></p>
                 <p>${article.summary || 'No summary available'}</p>
             `;

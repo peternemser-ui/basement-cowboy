@@ -27,6 +27,62 @@ load_dotenv()
 def create_app():
 
     app = Flask(__name__)
+    app.secret_key = os.getenv('FLASK_SECRET_KEY', 'fallback-secret-key-change-in-production')
+    
+    # Global request logger for debugging
+    @app.before_request
+    def log_request_info():
+        logging.info(f"DEBUG REQUEST: {request.method} {request.url} - Args: {dict(request.args)} - Remote: {request.remote_addr}")
+
+    # API Cost Tracking
+    API_COSTS = {
+        'summarization': 0.002,    # per request (gpt-3.5-turbo)
+        'categorization': 0.001,   # per request (gpt-3.5-turbo) 
+        'image_generation': 0.04   # per image (dall-e-3)
+    }
+
+    def track_api_cost(operation_type):
+        """Track API costs in session"""
+        if 'api_costs' not in session:
+            session['api_costs'] = {
+                'summarization': 0,
+                'categorization': 0, 
+                'image_generation': 0,
+                'total': 0
+            }
+        
+        cost = API_COSTS.get(operation_type, 0)
+        session['api_costs'][operation_type] += cost
+        session['api_costs']['total'] = sum([
+            session['api_costs']['summarization'],
+            session['api_costs']['categorization'],
+            session['api_costs']['image_generation']
+        ])
+        session.modified = True
+        logging.info(f"API Cost tracked: {operation_type} +${cost:.3f}, Total: ${session['api_costs']['total']:.3f}")
+
+    @app.route('/api_costs', methods=['GET'])
+    def get_api_costs():
+        """Get current session API costs"""
+        costs = session.get('api_costs', {
+            'summarization': 0,
+            'categorization': 0,
+            'image_generation': 0,
+            'total': 0
+        })
+        return jsonify(costs)
+
+    @app.route('/reset_api_costs', methods=['POST'])
+    def reset_api_costs():
+        """Reset API costs for current session"""
+        session['api_costs'] = {
+            'summarization': 0,
+            'categorization': 0,
+            'image_generation': 0,
+            'total': 0
+        }
+        session.modified = True
+        return jsonify({"success": True, "message": "API costs reset"})
 
     ########################################################################
     # API Key Validation Endpoint
@@ -327,9 +383,15 @@ def create_app():
     ########################################################################
     @app.route('/details', methods=['GET', 'POST'], endpoint='details')
     def details():
+        print("=== DETAILS ROUTE ACCESSED ===", flush=True)
+        logging.info("DEBUG: Details route accessed - checking API key...")
         # Ensure API key is still in session
         if 'OPENAI_API_KEY' not in session:
+            print("=== NO API KEY, REDIRECTING ===", flush=True)
+            logging.info("DEBUG: No API key in session, redirecting to index")
             return redirect(url_for('index'))
+        print("=== API KEY FOUND ===", flush=True)
+        logging.info("DEBUG: API key found, proceeding with details route")
             
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         articles_dir = os.path.join(base_dir, 'output', 'news_articles')
@@ -342,17 +404,53 @@ def create_app():
             categories = ["Uncategorized"]
 
         try:
+            # Check if a specific file was requested
+            requested_file = request.args.get('file', '')
+            logging.info(f"DEBUG: Requested file parameter = '{requested_file}'")
+            
             all_json_files = [f for f in os.listdir(articles_dir) if f.endswith('.json')]
             json_files = sorted(all_json_files, key=sort_files_by_datetime, reverse=True)
-            latest_file = os.path.join(articles_dir, json_files[0])
-            with open(latest_file, encoding='utf-8') as f:
+            
+            # Use requested file if specified and exists, otherwise use latest
+            if requested_file and requested_file in all_json_files:
+                target_file = os.path.join(articles_dir, requested_file)
+                logging.info(f"DEBUG: Using requested file: {requested_file}")
+            else:
+                target_file = os.path.join(articles_dir, json_files[0])
+                logging.info(f"DEBUG: Using latest file: {json_files[0]}")
+                
+            with open(target_file, encoding='utf-8') as f:
                 all_articles = json.load(f)
+            
+            logging.info(f"DEBUG: Loaded {len(all_articles)} articles from {os.path.basename(target_file)}")
 
 
-            # For GET requests, show all articles; for POST, filter by selected
-            if request.method == 'POST':
+            # Handle selected articles from query parameters or form data
+            selected_articles = []
+            
+            # Check for selected_indices in query parameters (from review page)
+            selected_indices_param = request.args.get('selected_indices', '')
+            print(f"=== SELECTED INDICES PARAM: '{selected_indices_param[:50]}...' ===", flush=True)
+            logging.info(f"DEBUG: selected_indices_param = '{selected_indices_param}'")
+            if selected_indices_param:
+                try:
+                    selected_indices = [int(idx.strip()) for idx in selected_indices_param.split(',') if idx.strip()]
+                    print(f"=== PARSED {len(selected_indices)} INDICES ===", flush=True)
+                    logging.info(f"DEBUG: Parsed selected_indices = {selected_indices[:5]}... (showing first 5)")
+                    logging.info(f"Successfully found {len(selected_indices)} selected indices for details view")
+                    for idx in selected_indices:
+                        if 0 <= idx < len(all_articles):
+                            selected_articles.append(all_articles[idx])
+                    print(f"=== SELECTED {len(selected_articles)} ARTICLES ===", flush=True)
+                    logging.info(f"DEBUG: selected_articles length = {len(selected_articles)}")
+                except (ValueError, IndexError) as e:
+                    print(f"=== ERROR PARSING INDICES: {e} ===", flush=True)
+                    logging.error(f"Error parsing selected indices: {e}")
+                    selected_articles = all_articles
+            
+            # Check for POST data (form submissions)
+            elif request.method == 'POST':
                 selected_indices = request.form.getlist('selected_articles')
-                selected_articles = []
                 for index in selected_indices:
                     try:
                         idx = int(index)
@@ -360,16 +458,20 @@ def create_app():
                             selected_articles.append(all_articles[idx])
                     except ValueError:
                         logging.error("Index was not an integer, skipping...")
+            
+            # Default to all articles if no selection
             else:
                 selected_articles = all_articles
                 
-            # Apply ranking to sort articles by quality
-            try:
-                ranked_articles = rank_articles_by_quality(selected_articles)
-                selected_articles = [item['article'] for item in ranked_articles]
-                logging.info(f"Successfully ranked {len(selected_articles)} articles for details view")
-            except Exception as e:
-                logging.warning(f"Could not rank articles for details view: {e}. Using original order.")
+            # Apply ranking to sort articles by quality (temporarily disabled for debugging)
+            # try:
+            #     ranked_articles = rank_articles_by_quality(selected_articles)
+            #     selected_articles = [item['article'] for item in ranked_articles]
+            #     logging.info(f"Successfully ranked {len(selected_articles)} articles for details view")
+            # except Exception as e:
+            #     logging.warning(f"Could not rank articles for details view: {e}. Using original order.")
+            
+            logging.info(f"DEBUG: Skipping ranking, using {len(selected_articles)} articles directly")
 
         except Exception as e:
             flash(f"Error loading articles: {e}")
@@ -391,8 +493,12 @@ def create_app():
                 'total': len(selected_articles)
             }
 
+        logging.info(f"Final template variables - selected_articles count: {len(selected_articles)}, articles_by_category keys: {list(articles_by_category.keys())}")
+        
         return render_template('details.html', 
                              articles_by_category=articles_by_category, 
+                             articles=selected_articles,
+                             selected_articles=selected_articles,
                              categories=categories,
                              article_rankings=article_rankings)
 
@@ -404,14 +510,14 @@ def create_app():
         def stream_logs():
             try:
                 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-                script_path = os.path.join(base_dir, 'scraper', 'scrape_news.py')
+                script_path = os.path.join(base_dir, 'test_quick_scrape.py')  # Use quick scraper instead
                 python_exe = sys.executable
                 
-                logging.info(f"Starting scraper: {script_path}")
+                logging.info(f"Starting quick scraper: {script_path}")
                 logging.info(f"Using Python executable: {python_exe}")
                 
                 # Send initial progress
-                yield "data: PROGRESS:0:Initializing scraper...\n\n"
+                yield "data: PROGRESS:0:Initializing quick scraper (5 reliable sites)...\n\n"
 
                 process = subprocess.Popen(
                     [python_exe, script_path],
@@ -424,7 +530,11 @@ def create_app():
                 )
 
                 site_count = 0
-                total_sites = 180  # Approximate number of sites
+                
+                # Quick scraper uses only 5 reliable sites
+                total_sites = 5
+                
+                logging.info(f"Tracking progress for {total_sites} news sites")
                 
                 for line in process.stdout:
                     line_stripped = line.strip()
@@ -438,7 +548,14 @@ def create_app():
                             yield "data: PROGRESS:100:Scraping completed successfully!\n\n"
                         elif "Found" in line_stripped and "articles" in line_stripped:
                             yield f"data: INFO:{line_stripped}\n\n"
-                        elif "ERROR" in line_stripped or "Error" in line_stripped:
+                        elif "WARNING" in line_stripped and ("403" in line_stripped or "401" in line_stripped or "Forbidden" in line_stripped):
+                            # Network access warnings - log but don't treat as errors
+                            yield f"data: LOG:{line_stripped}\n\n"
+                        elif "ERROR" in line_stripped and "Failed to fetch" not in line_stripped:
+                            # Only report serious errors, not network fetch failures
+                            yield f"data: ERROR:{line_stripped}\n\n"
+                        elif "Error" in line_stripped and ("Client Error" not in line_stripped and "Network" not in line_stripped):
+                            # Only report serious errors, not HTTP/network errors
                             yield f"data: ERROR:{line_stripped}\n\n"
                         elif "Saving" in line_stripped:
                             yield "data: PROGRESS:90:Saving articles to file...\n\n"
@@ -455,6 +572,84 @@ def create_app():
                     
             except Exception as e:
                 logging.error(f"Error regenerating scraper: {e}", exc_info=True)
+                import traceback
+                tb = traceback.format_exc()
+                yield f"data: ERROR:SERVER ERROR: {str(e)}\n\n"
+                yield f"data: ERROR:TRACEBACK: {tb}\n\n"
+
+        response = app.response_class(stream_logs(), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['Connection'] = 'keep-alive'
+        return response
+
+    ########################################################################
+    # Full Scraper (All 100 Sites)
+    ########################################################################
+    @app.route('/regenerate_full_scraper', methods=['POST'], endpoint='regenerate_full_scraper')
+    def regenerate_full_scraper():
+        def stream_logs():
+            try:
+                base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+                script_path = os.path.join(base_dir, 'scraper', 'scrape_news.py')  # Full scraper
+                python_exe = sys.executable
+                
+                logging.info(f"Starting full scraper: {script_path}")
+                logging.info(f"Using Python executable: {python_exe}")
+                
+                # Send initial progress
+                yield "data: PROGRESS:0:Initializing full scraper (100 sites - may take longer)...\n\n"
+
+                process = subprocess.Popen(
+                    [python_exe, script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=base_dir,
+                    bufsize=1,  # Line buffered
+                    universal_newlines=True
+                )
+
+                site_count = 0
+                total_sites = 100  # Full scraper
+
+                logging.info(f"Tracking progress for {total_sites} news sites")
+                
+                for line in iter(process.stdout.readline, ''):
+                    line_stripped = line.strip()
+                    if line_stripped:
+                        # Check for progress indicators and send structured progress
+                        if "Processing site:" in line_stripped:
+                            site_count += 1
+                            progress = min((site_count / total_sites) * 95, 95)  # Keep some room for completion
+                            yield f"data: PROGRESS:{progress}:Processing site {site_count}/{total_sites}\n\n"
+                        elif "Scraping complete" in line_stripped:
+                            yield "data: PROGRESS:100:Scraping completed successfully!\n\n"
+                        elif "Found" in line_stripped and "articles" in line_stripped:
+                            yield f"data: INFO:{line_stripped}\n\n"
+                        elif "WARNING" in line_stripped and ("403" in line_stripped or "401" in line_stripped or "Forbidden" in line_stripped):
+                            # Network access warnings - log but don't treat as errors
+                            yield f"data: LOG:{line_stripped}\n\n"
+                        elif "ERROR" in line_stripped and "Failed to fetch" not in line_stripped:
+                            # Only report serious errors, not network fetch failures
+                            yield f"data: ERROR:{line_stripped}\n\n"
+                        elif "Error" in line_stripped and ("Client Error" not in line_stripped and "Network" not in line_stripped):
+                            # Only report serious errors, not HTTP/network errors
+                            yield f"data: ERROR:{line_stripped}\n\n"
+                        elif "Saving" in line_stripped:
+                            yield "data: PROGRESS:90:Saving articles to file...\n\n"
+                        
+                        # Send all log output
+                        yield f"data: LOG:{line_stripped}\n\n"
+                
+                process.wait()
+                if process.returncode == 0:
+                    yield "data: PROGRESS:100:Full scraping completed successfully!\n\n"
+                    yield "data: SUCCESS:Full scraper finished successfully\n\n"
+                else:
+                    yield f"data: ERROR:Full scraper encountered an error. Exit code: {process.returncode}\n\n"
+                    
+            except Exception as e:
+                logging.error(f"Error regenerating full scraper: {e}", exc_info=True)
                 import traceback
                 tb = traceback.format_exc()
                 yield f"data: ERROR:SERVER ERROR: {str(e)}\n\n"
@@ -652,11 +847,11 @@ def create_app():
                         # Add image if available with enhanced styling and alt text
                         image_url = article.get("image")
                         if image_url:
-                            title = article.get("title", "News Image").replace('"', '&quot;')
+                            title = article.get("headline", article.get("title", "News Image")).replace('"', '&quot;')
                             html_content += f'<img src="{image_url}" alt="{title}" loading="lazy" />\n'
                         
                         # Add title
-                        title = article.get('title', 'Untitled')
+                        title = article.get('headline', article.get('title', 'Untitled'))
                         html_content += f"<h4>{title}</h4>\n"
                         
                         # Add summary
@@ -918,6 +1113,7 @@ def create_app():
                 )
                 summary = summary_response.choices[0].message.content.strip()
                 logging.info("Summary generated successfully")
+                track_api_cost('summarization')  # Track API cost
                 return jsonify({"success": True, "summary": summary})
             except Exception as e:
                 logging.error(f"OpenAI error in summarization: {e}", exc_info=True)
@@ -1106,6 +1302,7 @@ def create_app():
                 if b64_string:
                     resp_payload['b64'] = b64_string
 
+                track_api_cost('image_generation')  # Track API cost
                 return jsonify(resp_payload)
             except Exception as e:
                 logging.error(f"OpenAI image generation error: {e}", exc_info=True)
@@ -1117,6 +1314,50 @@ def create_app():
 
         except Exception as e:
             logging.error(f"Error generating image: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "Failed to generate image."}), 500
+
+    @app.route('/ai_generate_image', methods=['POST'])
+    def ai_generate_image():
+        """AI Image Generation endpoint for the enhancement studio"""
+        try:
+            data = request.json
+            headline = data.get('headline', '')
+            
+            if not headline:
+                return jsonify({"success": False, "error": "No headline provided."}), 400
+            
+            logging.info(f"Generating AI image for headline: {headline}")
+            
+            # Use the existing generate_image function logic
+            oclient = get_openai_client()
+            if not oclient:
+                return jsonify({"success": False, "error": "OpenAI API key not available. Please validate your API key first."}), 401
+            
+            # Generate a cleaned prompt from the headline
+            prompt = f"A professional news illustration depicting: {headline}. Modern, clean style, suitable for news article."
+            
+            try:
+                response = oclient.images.generate(
+                    model="dall-e-3",
+                    prompt=prompt,
+                    size="1024x1024",
+                    quality="standard",
+                    n=1
+                )
+                
+                if response.data and len(response.data) > 0:
+                    image_url = response.data[0].url
+                    track_api_cost('image_generation')  # Track API cost
+                    return jsonify({"success": True, "image_url": image_url})
+                else:
+                    return jsonify({"success": False, "error": "No image generated."}), 500
+                    
+            except Exception as e:
+                logging.error(f"OpenAI image generation error: {e}")
+                return jsonify({"success": False, "error": str(e)}), 500
+                
+        except Exception as e:
+            logging.error(f"Error in ai_generate_image: {e}")
             return jsonify({"success": False, "error": "Failed to generate image."}), 500
 
     ########################################################################
@@ -1155,10 +1396,10 @@ def create_app():
 
             if wp_response.status_code == 201:
                 wp_image_url = wp_response.json().get("source_url")
-                logging.info(f"✅ Image uploaded successfully: {wp_image_url}")
+                logging.info(f"SUCCESS: Image uploaded successfully: {wp_image_url}")
                 return wp_image_url
             else:
-                logging.error(f"❌ WordPress Upload Failed: {wp_response.status_code} - {wp_response.text}")
+                logging.error(f"ERROR: WordPress Upload Failed: {wp_response.status_code} - {wp_response.text}")
                 return None
 
         except Exception as e:
@@ -1273,12 +1514,22 @@ def create_app():
     ########################################################################
     @app.route('/ai_categorize', methods=['POST'])
     def ai_categorize():
-        data = request.json
-        title = data.get('title', '')
-        summary = data.get('summary', '')
+        try:
+            data = request.json
+            logging.info(f"ai_categorize received data: {data}")
+            
+            # Handle both old and new field names for compatibility
+            title = data.get('title', '') or data.get('headline', '')
+            summary = data.get('summary', '') or data.get('text', '')
+            
+            logging.info(f"ai_categorize processed - title: '{title[:50]}...', summary: '{summary[:50]}...'")
 
-        if not title and not summary:
-            return jsonify({"success": False, "error": "No title or summary provided."}), 400
+            if not title and not summary:
+                logging.warning("ai_categorize: No title or summary provided")
+                return jsonify({"success": False, "error": "No title or summary provided."}), 400
+        except Exception as e:
+            logging.error(f"ai_categorize: Error parsing request data: {e}")
+            return jsonify({"success": False, "error": "Invalid request data"}), 400
 
         try:
             # Load available categories
@@ -1339,9 +1590,10 @@ def create_app():
                         suggested_category = categories[0]
                         confidence = 30
                 
+                track_api_cost('categorization')  # Track API cost
                 return jsonify({
                     "success": True, 
-                    "suggested_category": suggested_category,
+                    "category": suggested_category,
                     "confidence": confidence,
                     "all_categories": categories
                 })

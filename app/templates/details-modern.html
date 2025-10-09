@@ -24,13 +24,13 @@
         .enhancement-studio {
             background: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-700) 100%);
             color: var(--color-white);
-            padding: var(--space-4) 0;
-            margin-bottom: var(--space-6);
+            padding: var(--space-8) 0;
+            margin-bottom: var(--space-8);
         }
         
         .enhancement-studio h1 {
             color: var(--color-white);
-            margin-bottom: var(--space-4);
+            margin-bottom: var(--space-6);
             font-weight: var(--font-weight-bold);
         }
         
@@ -110,10 +110,6 @@
         }
         
         @media (max-width: 768px) {
-            .enhancement-studio {
-                padding: var(--space-3) 0;
-            }
-            
             .article-enhancement-grid {
                 grid-template-columns: 1fr;
             }
@@ -181,34 +177,6 @@
             font-weight: var(--font-weight-medium);
             color: var(--color-text-secondary);
             margin-bottom: var(--space-2);
-        }
-        
-        /* Quick Actions Bar */
-        .quick-actions-bar {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: var(--radius-lg);
-            padding: var(--space-4);
-            margin-bottom: var(--space-6);
-        }
-        
-        .quick-actions-bar .btn {
-            border: none;
-            border-radius: var(--radius-md);
-            padding: var(--space-3) var(--space-4);
-            font-weight: var(--font-weight-medium);
-            transition: all 0.2s ease;
-            backdrop-filter: blur(10px);
-        }
-        
-        .quick-actions-bar .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-        
-        .quick-actions-bar .btn i {
-            margin-right: var(--space-2);
         }
         
         /* Quick Actions Panel */
@@ -286,29 +254,6 @@
                     <div class="stat-label">Ready to Publish</div>
                 </div>
             </div>
-            
-            <!-- Quick Actions Bar -->
-            <div class="quick-actions-bar mb-4">
-                <div class="d-flex flex-wrap gap-3 justify-content-center">
-                    <button type="button" class="btn btn-primary" onclick="enhanceAllSummaries()">
-                        <i class="fas fa-magic"></i> Enhance All Summaries
-                    </button>
-                    <button type="button" class="btn btn-success" onclick="generateAllImages()">
-                        <i class="fas fa-image"></i> Generate All Images
-                    </button>
-                    <button type="button" class="btn btn-info" onclick="categorizeAllArticles()">
-                        <i class="fas fa-tags"></i> Auto-Categorize All
-                    </button>
-                    <button type="button" class="btn btn-warning" onclick="selectAllArticles()">
-                        <i class="fas fa-check-all"></i> Select All for Publishing
-                    </button>
-                </div>
-            </div>
-            <script>
-            // Clean console logging for development
-            console.log('Article Enhancement Studio loaded');
-            console.log('Selected articles:', {{ selected_articles|length if selected_articles else 0 }});
-            </script>
             
             <!-- API Cost Tracker -->
             <div class="api-costs">
@@ -407,7 +352,7 @@
                                 <option value="World" {{ 'selected' if article.category == 'World' else '' }}>World</option>
                             </select>
                             <button type="button" class="btn btn-sm btn-info" 
-                                    onclick="aiCategorize({{ loop.index0 }}, '{{ article.headline|e }}', '{{ article.summary|e }}')">
+                                    onclick="aiCategorize({{ loop.index0 }}, '{{ article.headline|e }}', '{{ article.text|e }}')">
                                 <i class="fas fa-robot me-1"></i>Auto-Categorize
                             </button>
                         </div>
@@ -484,7 +429,7 @@
                             <option value="World" {{ 'selected' if article.category == 'World' else '' }}>World</option>
                         </select>
                         <button type="button" class="btn btn-sm btn-info" 
-                                onclick="aiCategorize({{ loop.index0 }}, '{{ article.headline|e }}', '{{ article.summary|e }}')">
+                                onclick="aiCategorize({{ loop.index0 }}, '{{ article.headline|e }}', '{{ article.text|e }}')">
                             <i class="fas fa-robot me-1"></i>Auto-Categorize
                         </button>
                     </div>
@@ -524,28 +469,29 @@
         // API Cost Tracking
         let apiCosts = {
             summarization: 0,
-            categorization: 0,
-            image_generation: 0,
-            total: 0
+            imageGeneration: 0,
+            categorization: 0
         };
 
-        async function fetchAPICosts() {
-            try {
-                const response = await fetch('/api_costs');
-                if (response.ok) {
-                    apiCosts = await response.json();
-                    updateCostDisplay();
-                }
-            } catch (error) {
-                console.error('Error fetching API costs:', error);
-            }
-        }
+        // Cost per operation (approximate OpenAI pricing)
+        const costPerOperation = {
+            summarization: 0.002, // per request
+            imageGeneration: 0.04, // per image
+            categorization: 0.001 // per request
+        };
 
         function updateCostDisplay() {
             document.getElementById('summary-cost').textContent = '$' + apiCosts.summarization.toFixed(3);
-            document.getElementById('image-cost').textContent = '$' + apiCosts.image_generation.toFixed(3);
+            document.getElementById('image-cost').textContent = '$' + apiCosts.imageGeneration.toFixed(3);
             document.getElementById('category-cost').textContent = '$' + apiCosts.categorization.toFixed(3);
-            document.getElementById('total-cost').textContent = '$' + apiCosts.total.toFixed(3);
+            
+            const total = apiCosts.summarization + apiCosts.imageGeneration + apiCosts.categorization;
+            document.getElementById('total-cost').textContent = '$' + total.toFixed(3);
+        }
+
+        function trackCost(operation) {
+            apiCosts[operation] += costPerOperation[operation];
+            updateCostDisplay();
         }
 
         // Update publish count
@@ -605,7 +551,7 @@
                 
                 if (response.data.success) {
                     summaryTextarea.value = response.data.summary;
-                    fetchAPICosts(); // Refresh API costs from server
+                    trackCost('summarization'); // Track cost
                     updateEnhancedCount();
                 } else {
                     summaryTextarea.value = 'Error generating summary: ' + response.data.error;
@@ -641,7 +587,7 @@
                     if (imageElement) {
                         imageElement.src = response.data.image_url;
                     }
-                    fetchAPICosts(); // Refresh API costs from server
+                    trackCost('imageGeneration'); // Track cost
                     updateEnhancedCount();
                 } else {
                     imageInput.value = 'Error generating image: ' + response.data.error;
@@ -656,7 +602,7 @@
         }
 
         // Enhanced AI categorization with cost tracking
-        async function aiCategorize(articleIndex, headline, articleSummary) {
+        async function aiCategorize(articleIndex, headline, articleText) {
             const categorySelect = document.querySelector(`select[name='category-${articleIndex}']`);
             const button = event.target;
             
@@ -667,12 +613,12 @@
             try {
                 const response = await axios.post('/ai_categorize', {
                     headline: headline,
-                    summary: articleSummary
+                    text: articleText
                 });
                 
                 if (response.data.success) {
                     categorySelect.value = response.data.category;
-                    fetchAPICosts(); // Refresh API costs from server
+                    trackCost('categorization'); // Track cost
                     updateEnhancedCount();
                 } else {
                     console.error('Error categorizing article:', response.data.error);
@@ -746,126 +692,6 @@
             }
         }
 
-        // Quick Action Functions
-        function enhanceAllSummaries() {
-            if (!confirm('This will enhance ALL article summaries using AI. This may take a while and use API credits. Continue?')) {
-                return;
-            }
-            
-            const buttons = document.querySelectorAll('button[onclick^="enhanceSummary"]');
-            let completed = 0;
-            const total = buttons.length;
-            
-            // Show progress
-            const progressDiv = document.createElement('div');
-            progressDiv.className = 'alert alert-info position-fixed';
-            progressDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-            progressDiv.innerHTML = `<strong>Enhancing summaries...</strong><br>Progress: <span id="enhance-progress">0/${total}</span>`;
-            document.body.appendChild(progressDiv);
-            
-            // Process each button with delay
-            buttons.forEach((button, index) => {
-                setTimeout(() => {
-                    button.click();
-                    completed++;
-                    document.getElementById('enhance-progress').textContent = `${completed}/${total}`;
-                    
-                    if (completed === total) {
-                        setTimeout(() => {
-                            progressDiv.innerHTML = '<strong>✅ All summaries enhanced!</strong>';
-                            setTimeout(() => progressDiv.remove(), 3000);
-                        }, 1000);
-                    }
-                }, index * 2000); // 2 second delay between each
-            });
-        }
-        
-        function generateAllImages() {
-            if (!confirm('This will generate AI images for ALL articles. This will use significant API credits. Continue?')) {
-                return;
-            }
-            
-            const buttons = document.querySelectorAll('button[onclick^="createAIImage"]');
-            let completed = 0;
-            const total = buttons.length;
-            
-            // Show progress
-            const progressDiv = document.createElement('div');
-            progressDiv.className = 'alert alert-success position-fixed';
-            progressDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-            progressDiv.innerHTML = `<strong>Generating images...</strong><br>Progress: <span id="image-progress">0/${total}</span>`;
-            document.body.appendChild(progressDiv);
-            
-            // Process each button with delay
-            buttons.forEach((button, index) => {
-                setTimeout(() => {
-                    button.click();
-                    completed++;
-                    document.getElementById('image-progress').textContent = `${completed}/${total}`;
-                    
-                    if (completed === total) {
-                        setTimeout(() => {
-                            progressDiv.innerHTML = '<strong>🎨 All images generated!</strong>';
-                            setTimeout(() => progressDiv.remove(), 3000);
-                        }, 1000);
-                    }
-                }, index * 3000); // 3 second delay between each
-            });
-        }
-        
-        function categorizeAllArticles() {
-            if (!confirm('This will auto-categorize ALL articles using AI. Continue?')) {
-                return;
-            }
-            
-            const buttons = document.querySelectorAll('button[onclick^="aiCategorize"]');
-            let completed = 0;
-            const total = buttons.length;
-            
-            // Show progress
-            const progressDiv = document.createElement('div');
-            progressDiv.className = 'alert alert-info position-fixed';
-            progressDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-            progressDiv.innerHTML = `<strong>Categorizing articles...</strong><br>Progress: <span id="category-progress">0/${total}</span>`;
-            document.body.appendChild(progressDiv);
-            
-            // Process each button with delay
-            buttons.forEach((button, index) => {
-                setTimeout(() => {
-                    button.click();
-                    completed++;
-                    document.getElementById('category-progress').textContent = `${completed}/${total}`;
-                    
-                    if (completed === total) {
-                        setTimeout(() => {
-                            progressDiv.innerHTML = '<strong>🏷️ All articles categorized!</strong>';
-                            setTimeout(() => progressDiv.remove(), 3000);
-                        }, 1000);
-                    }
-                }, index * 1500); // 1.5 second delay between each
-            });
-        }
-        
-        function selectAllArticles() {
-            const checkboxes = document.querySelectorAll('input[type="checkbox"][name="selected_articles"]');
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-            
-            checkboxes.forEach(cb => {
-                cb.checked = !allChecked;
-            });
-            
-            updatePublishCount();
-            
-            // Show feedback
-            const message = allChecked ? 'All articles deselected' : 'All articles selected for publishing';
-            const alertDiv = document.createElement('div');
-            alertDiv.className = 'alert alert-warning position-fixed';
-            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 200px;';
-            alertDiv.innerHTML = `<strong>${message}</strong>`;
-            document.body.appendChild(alertDiv);
-            setTimeout(() => alertDiv.remove(), 2000);
-        }
-
         function logout() {
             if (confirm('Are you sure you want to logout? Any unsaved changes will be lost.')) {
                 window.location.href = '/';
@@ -874,7 +700,7 @@
 
         // Initialize cost tracking on page load
         document.addEventListener('DOMContentLoaded', function() {
-            fetchAPICosts(); // Load API costs from server
+            updateCostDisplay();
             updatePublishCount();
             updateEnhancedCount();
         });
