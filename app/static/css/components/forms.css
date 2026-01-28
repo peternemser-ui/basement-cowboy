@@ -1,0 +1,252 @@
+/**
+ * Form Component Styles
+ */
+
+/* Form Groups */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary, #212529);
+}
+
+.form-group .form-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted, #6c757d);
+    margin-top: 0.25rem;
+}
+
+/* Inputs */
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--text-primary, #212529);
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-control:focus {
+    border-color: var(--primary, #667eea);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    outline: none;
+}
+
+.form-control.is-invalid {
+    border-color: var(--danger, #dc3545);
+}
+
+.form-control.is-valid {
+    border-color: var(--success, #28a745);
+}
+
+/* Textarea */
+textarea.form-control {
+    min-height: 120px;
+    resize: vertical;
+}
+
+/* Select */
+.form-select {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
+    font-size: 1rem;
+    color: var(--text-primary, #212529);
+    background-color: #fff;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    appearance: none;
+}
+
+.form-select:focus {
+    border-color: var(--primary, #667eea);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    outline: none;
+}
+
+/* Checkbox & Radio */
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.form-check-input {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin: 0;
+    accent-color: var(--primary, #667eea);
+    cursor: pointer;
+}
+
+.form-check-label {
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Switch Toggle */
+.form-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.form-switch-input {
+    width: 3rem;
+    height: 1.5rem;
+    appearance: none;
+    background-color: #dee2e6;
+    border-radius: 1.5rem;
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.form-switch-input::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(1.5rem - 4px);
+    height: calc(1.5rem - 4px);
+    background-color: white;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.form-switch-input:checked {
+    background-color: var(--primary, #667eea);
+}
+
+.form-switch-input:checked::before {
+    transform: translateX(1.5rem);
+}
+
+/* Input Groups */
+.input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.input-group .form-control {
+    flex: 1;
+    border-radius: 8px 0 0 8px;
+}
+
+.input-group-append {
+    display: flex;
+}
+
+.input-group-append .btn {
+    border-radius: 0 8px 8px 0;
+}
+
+.input-group-text {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 0;
+}
+
+/* Floating Labels */
+.form-floating {
+    position: relative;
+}
+
+.form-floating .form-control {
+    padding-top: 1.625rem;
+    padding-bottom: 0.625rem;
+}
+
+.form-floating label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 1rem;
+    pointer-events: none;
+    transform-origin: 0 0;
+    transition: opacity 0.1s ease, transform 0.1s ease;
+    color: var(--text-muted, #6c757d);
+}
+
+.form-floating .form-control:focus ~ label,
+.form-floating .form-control:not(:placeholder-shown) ~ label {
+    opacity: 0.65;
+    transform: scale(0.85) translateY(-0.5rem) translateX(0.15rem);
+}
+
+/* Validation Messages */
+.invalid-feedback {
+    display: none;
+    color: var(--danger, #dc3545);
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+
+.valid-feedback {
+    display: none;
+    color: var(--success, #28a745);
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.is-valid ~ .valid-feedback {
+    display: block;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color, #e9ecef);
+    margin-top: 1.5rem;
+}
+
+/* API Key Input */
+.api-key-input {
+    font-family: monospace;
+}
+
+.api-key-input-wrapper {
+    position: relative;
+}
+
+.api-key-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted, #6c757d);
+    cursor: pointer;
+    padding: 4px;
+}
+
+.api-key-toggle:hover {
+    color: var(--primary, #667eea);
+}

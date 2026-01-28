@@ -1,0 +1,222 @@
+<!-- Toast Notification Component -->
+<!-- Usage: {% include 'components/toast_notification.html' %} -->
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container" style="z-index: 9999;">
+    <!-- Toasts will be inserted here dynamically -->
+</div>
+
+<style>
+.toast-container {
+    max-width: 400px;
+}
+
+.custom-toast {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border: none;
+    overflow: hidden;
+    margin-bottom: 12px;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.custom-toast.hiding {
+    animation: slideOut 0.3s ease forwards;
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.toast-header-custom {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.toast-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    font-size: 14px;
+}
+
+.toast-success .toast-icon {
+    background: #d4edda;
+    color: #28a745;
+}
+
+.toast-error .toast-icon {
+    background: #f8d7da;
+    color: #dc3545;
+}
+
+.toast-warning .toast-icon {
+    background: #fff3cd;
+    color: #ffc107;
+}
+
+.toast-info .toast-icon {
+    background: #d1ecf1;
+    color: #17a2b8;
+}
+
+.toast-title {
+    font-weight: 600;
+    flex: 1;
+    color: #333;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #999;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.toast-close:hover {
+    color: #333;
+}
+
+.toast-body-custom {
+    padding: 12px 16px;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.toast-actions {
+    padding: 8px 16px 16px;
+    display: flex;
+    gap: 8px;
+}
+
+.toast-actions .btn {
+    font-size: 0.85rem;
+    padding: 6px 16px;
+}
+</style>
+
+<script>
+// Toast notification system
+const Toast = {
+    container: null,
+
+    init: function() {
+        this.container = document.getElementById('toast-container');
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = 'toast-container';
+            this.container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            this.container.style.zIndex = '9999';
+            document.body.appendChild(this.container);
+        }
+    },
+
+    show: function(options) {
+        if (!this.container) this.init();
+
+        const {
+            type = 'info',
+            title = '',
+            message = '',
+            duration = 5000,
+            actions = []
+        } = options;
+
+        const icons = {
+            success: 'bi-check-lg',
+            error: 'bi-x-lg',
+            warning: 'bi-exclamation-lg',
+            info: 'bi-info-lg'
+        };
+
+        const id = 'toast-' + Date.now();
+
+        const toast = document.createElement('div');
+        toast.id = id;
+        toast.className = `custom-toast toast-${type}`;
+
+        let actionsHtml = '';
+        if (actions.length > 0) {
+            actionsHtml = '<div class="toast-actions">' +
+                actions.map(a => `<button class="btn btn-${a.variant || 'primary'} btn-sm" onclick="${a.onclick}">${a.label}</button>`).join('') +
+                '</div>';
+        }
+
+        toast.innerHTML = `
+            <div class="toast-header-custom">
+                <span class="toast-icon"><i class="bi ${icons[type]}"></i></span>
+                <span class="toast-title">${title}</span>
+                <button class="toast-close" onclick="Toast.dismiss('${id}')">&times;</button>
+            </div>
+            <div class="toast-body-custom">${message}</div>
+            ${actionsHtml}
+        `;
+
+        this.container.appendChild(toast);
+
+        // Auto dismiss
+        if (duration > 0) {
+            setTimeout(() => this.dismiss(id), duration);
+        }
+
+        return id;
+    },
+
+    dismiss: function(id) {
+        const toast = document.getElementById(id);
+        if (toast) {
+            toast.classList.add('hiding');
+            setTimeout(() => toast.remove(), 300);
+        }
+    },
+
+    success: function(title, message, duration = 5000) {
+        return this.show({ type: 'success', title, message, duration });
+    },
+
+    error: function(title, message, duration = 8000) {
+        return this.show({ type: 'error', title, message, duration });
+    },
+
+    warning: function(title, message, duration = 6000) {
+        return this.show({ type: 'warning', title, message, duration });
+    },
+
+    info: function(title, message, duration = 5000) {
+        return this.show({ type: 'info', title, message, duration });
+    }
+};
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => Toast.init());
+
+// Make globally available
+window.Toast = Toast;
+</script>

@@ -1,0 +1,238 @@
+<!-- Modal Dialog Component -->
+<!-- Usage: {% include 'components/modal_dialog.html' %} -->
+
+<div class="modal fade" id="genericModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" id="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-title">Modal Title</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                Modal content goes here.
+            </div>
+            <div class="modal-footer" id="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal-content {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    border-bottom: 1px solid #f0f0f0;
+    padding: 20px 24px;
+}
+
+.modal-title {
+    font-weight: 600;
+    color: #333;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    border-top: 1px solid #f0f0f0;
+    padding: 16px 24px;
+}
+
+/* Confirmation Modal Styling */
+.modal-confirm .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px 16px 0 0;
+}
+
+.modal-confirm .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+/* Danger Modal Styling */
+.modal-danger .modal-header {
+    background: #dc3545;
+    color: white;
+    border-radius: 16px 16px 0 0;
+}
+
+.modal-danger .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+/* Large Modal */
+.modal-lg .modal-dialog {
+    max-width: 800px;
+}
+
+/* Full Screen Modal */
+.modal-fullscreen .modal-dialog {
+    max-width: 100%;
+    margin: 0;
+    height: 100%;
+}
+
+.modal-fullscreen .modal-content {
+    border-radius: 0;
+    height: 100%;
+}
+
+/* Article Preview Modal */
+.article-preview-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.article-preview-content h1 {
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+}
+
+.article-preview-meta {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.article-preview-image {
+    width: 100%;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.article-preview-text {
+    line-height: 1.8;
+    color: #333;
+}
+</style>
+
+<script>
+// Modal utility functions
+const Modal = {
+    instance: null,
+
+    show: function(options) {
+        const {
+            title = 'Modal',
+            content = '',
+            size = 'default', // default, lg, xl, fullscreen
+            type = 'default', // default, confirm, danger
+            buttons = [{label: 'Close', variant: 'secondary', dismiss: true}],
+            onShow = null,
+            onHide = null
+        } = options;
+
+        const modal = document.getElementById('genericModal');
+        const dialog = document.getElementById('modal-dialog');
+        const titleEl = document.getElementById('modal-title');
+        const bodyEl = document.getElementById('modal-body');
+        const footerEl = document.getElementById('modal-footer');
+
+        // Set size
+        dialog.className = 'modal-dialog modal-dialog-centered';
+        if (size === 'lg') dialog.classList.add('modal-lg');
+        if (size === 'xl') dialog.classList.add('modal-xl');
+        if (size === 'fullscreen') dialog.classList.add('modal-fullscreen');
+
+        // Set type
+        modal.querySelector('.modal-content').className = 'modal-content';
+        if (type === 'confirm') modal.querySelector('.modal-content').classList.add('modal-confirm');
+        if (type === 'danger') modal.querySelector('.modal-content').classList.add('modal-danger');
+
+        // Set content
+        titleEl.textContent = title;
+        bodyEl.innerHTML = content;
+
+        // Set buttons
+        footerEl.innerHTML = buttons.map(btn => {
+            const dismissAttr = btn.dismiss ? 'data-bs-dismiss="modal"' : '';
+            const onclickAttr = btn.onclick ? `onclick="${btn.onclick}"` : '';
+            return `<button type="button" class="btn btn-${btn.variant || 'secondary'}" ${dismissAttr} ${onclickAttr}>${btn.label}</button>`;
+        }).join('');
+
+        // Event handlers
+        if (onShow) modal.addEventListener('shown.bs.modal', onShow, {once: true});
+        if (onHide) modal.addEventListener('hidden.bs.modal', onHide, {once: true});
+
+        // Show modal
+        this.instance = new bootstrap.Modal(modal);
+        this.instance.show();
+
+        return this.instance;
+    },
+
+    hide: function() {
+        if (this.instance) {
+            this.instance.hide();
+        }
+    },
+
+    confirm: function(title, message, onConfirm) {
+        return this.show({
+            title: title,
+            content: `<p>${message}</p>`,
+            type: 'confirm',
+            buttons: [
+                {label: 'Cancel', variant: 'secondary', dismiss: true},
+                {label: 'Confirm', variant: 'primary', onclick: `Modal.hide(); (${onConfirm.toString()})()`}
+            ]
+        });
+    },
+
+    danger: function(title, message, onConfirm) {
+        return this.show({
+            title: title,
+            content: `<p>${message}</p>`,
+            type: 'danger',
+            buttons: [
+                {label: 'Cancel', variant: 'secondary', dismiss: true},
+                {label: 'Delete', variant: 'danger', onclick: `Modal.hide(); (${onConfirm.toString()})()`}
+            ]
+        });
+    },
+
+    alert: function(title, message) {
+        return this.show({
+            title: title,
+            content: `<p>${message}</p>`,
+            buttons: [{label: 'OK', variant: 'primary', dismiss: true}]
+        });
+    },
+
+    articlePreview: function(article) {
+        const content = `
+            <div class="article-preview-content">
+                <h1>${article.title}</h1>
+                <div class="article-preview-meta">
+                    <span><i class="bi bi-newspaper"></i> ${article.source?.name || 'Unknown'}</span>
+                    ${article.author ? `<span><i class="bi bi-person"></i> ${article.author}</span>` : ''}
+                    ${article.category ? `<span><i class="bi bi-tag"></i> ${article.category}</span>` : ''}
+                </div>
+                ${article.image_url ? `<img src="${article.image_url}" class="article-preview-image" alt="${article.title}">` : ''}
+                <div class="article-preview-text">${article.content || article.excerpt || 'No content available.'}</div>
+            </div>
+        `;
+
+        return this.show({
+            title: 'Article Preview',
+            content: content,
+            size: 'lg',
+            buttons: [
+                {label: 'Close', variant: 'secondary', dismiss: true},
+                {label: 'Open Original', variant: 'primary', onclick: `window.open('${article.url}', '_blank')`}
+            ]
+        });
+    }
+};
+
+// Make globally available
+window.Modal = Modal;
+</script>

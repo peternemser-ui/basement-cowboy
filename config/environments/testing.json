@@ -1,0 +1,43 @@
+{
+  "environment": "testing",
+  "debug": true,
+  "flask": {
+    "debug": true,
+    "host": "127.0.0.1",
+    "port": 5001,
+    "testing": true
+  },
+  "scraper": {
+    "max_articles_per_source": 2,
+    "max_total_articles": 10,
+    "request_delay": 0.1,
+    "timeout": 10,
+    "use_playwright": false
+  },
+  "openai": {
+    "chat_model": "gpt-3.5-turbo",
+    "image_model": "dall-e-3",
+    "max_tokens": 100,
+    "temperature": 0.5,
+    "max_cost_per_article": 0.10,
+    "max_daily_cost": 5.0
+  },
+  "wordpress": {
+    "default_status": "draft",
+    "upload_images": false
+  },
+  "cache": {
+    "memory_max_size": 50,
+    "memory_ttl": 10,
+    "file_ttl": 60
+  },
+  "logging": {
+    "level": "DEBUG",
+    "format": "%(levelname)s [%(name)s] %(message)s",
+    "file": null
+  },
+  "testing": {
+    "use_mock_apis": true,
+    "test_data_dir": "tests/fixtures"
+  }
+}

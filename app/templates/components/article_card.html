@@ -1,0 +1,183 @@
+<!-- Article Card Component -->
+<!-- Usage: {% include 'components/article_card.html' %} -->
+
+<div class="article-card" data-article-id="{{ article.id }}" data-rank="{{ article.rank_score|default(0) }}">
+    <div class="article-card-inner">
+        {% if article.image_url or article.generated_image_url %}
+        <div class="article-card-image">
+            <img src="{{ article.generated_image_url or article.image_url }}"
+                 alt="{{ article.title }}"
+                 loading="lazy"
+                 onerror="this.style.display='none'">
+            {% if article.generated_image_url %}
+            <span class="badge badge-ai">AI Generated</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="article-card-content">
+            <div class="article-card-meta">
+                {% if article.category %}
+                <span class="article-category">{{ article.category }}</span>
+                {% endif %}
+                <span class="article-source">{{ article.source.name }}</span>
+                <span class="article-time" title="{{ article.scraped_at }}">
+                    {{ article.scraped_at|timeago if article.scraped_at else 'Unknown' }}
+                </span>
+            </div>
+
+            <h3 class="article-card-title">
+                <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">
+                    {{ article.title }}
+                </a>
+            </h3>
+
+            {% if article.excerpt %}
+            <p class="article-card-excerpt">{{ article.excerpt|truncate(150) }}</p>
+            {% endif %}
+
+            <div class="article-card-footer">
+                {% if article.author %}
+                <span class="article-author">
+                    <i class="bi bi-person"></i> {{ article.author }}
+                </span>
+                {% endif %}
+
+                {% if article.rank_score %}
+                <span class="article-score" title="Ranking Score">
+                    <i class="bi bi-star-fill"></i> {{ (article.rank_score * 100)|round|int }}
+                </span>
+                {% endif %}
+
+                <div class="article-card-actions">
+                    <button class="btn btn-sm btn-outline-primary"
+                            onclick="viewArticleDetails('{{ article.id }}')"
+                            title="View Details">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success"
+                            onclick="selectArticle('{{ article.id }}')"
+                            title="Select for Publishing">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.article-card {
+    background: var(--card-bg, #fff);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    height: 100%;
+}
+
+.article-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+
+.article-card-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.article-card-image {
+    position: relative;
+    aspect-ratio: 16/9;
+    overflow: hidden;
+}
+
+.article-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.article-card-image .badge-ai {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 0.7rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.article-card-content {
+    padding: 16px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.article-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 0.75rem;
+    color: var(--text-muted, #6c757d);
+}
+
+.article-category {
+    background: var(--primary-light, #e3f2fd);
+    color: var(--primary, #1976d2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.article-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.article-card-title a {
+    color: var(--text-primary, #212529);
+    text-decoration: none;
+}
+
+.article-card-title a:hover {
+    color: var(--primary, #1976d2);
+}
+
+.article-card-excerpt {
+    font-size: 0.875rem;
+    color: var(--text-secondary, #495057);
+    line-height: 1.5;
+    flex: 1;
+}
+
+.article-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color, #e9ecef);
+}
+
+.article-author,
+.article-score {
+    font-size: 0.75rem;
+    color: var(--text-muted, #6c757d);
+}
+
+.article-score {
+    color: var(--warning, #ffc107);
+}
+
+.article-card-actions {
+    display: flex;
+    gap: 4px;
+}
+</style>

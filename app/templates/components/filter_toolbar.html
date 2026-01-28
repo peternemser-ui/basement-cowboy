@@ -1,0 +1,337 @@
+<!-- Filter Toolbar Component -->
+<!-- Usage: {% include 'components/filter_toolbar.html' %} -->
+
+<div class="filter-toolbar" id="filter-toolbar">
+    <div class="filter-toolbar-inner">
+        <!-- Search -->
+        <div class="filter-search">
+            <i class="bi bi-search"></i>
+            <input type="text"
+                   id="filter-search-input"
+                   class="form-control"
+                   placeholder="Search articles..."
+                   onkeyup="FilterToolbar.onSearch(this.value)">
+        </div>
+
+        <!-- Category Filter -->
+        <div class="filter-dropdown">
+            <select id="filter-category" class="form-select" onchange="FilterToolbar.onCategoryChange(this.value)">
+                <option value="">All Categories</option>
+                {% for category in categories|default([]) %}
+                <option value="{{ category }}">{{ category }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Source Filter -->
+        <div class="filter-dropdown">
+            <select id="filter-source" class="form-select" onchange="FilterToolbar.onSourceChange(this.value)">
+                <option value="">All Sources</option>
+                {% for source in sources|default([]) %}
+                <option value="{{ source }}">{{ source }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Date Filter -->
+        <div class="filter-dropdown">
+            <select id="filter-date" class="form-select" onchange="FilterToolbar.onDateChange(this.value)">
+                <option value="">All Time</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+            </select>
+        </div>
+
+        <!-- Sort -->
+        <div class="filter-dropdown">
+            <select id="filter-sort" class="form-select" onchange="FilterToolbar.onSortChange(this.value)">
+                <option value="rank">Highest Ranked</option>
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="title">Title A-Z</option>
+            </select>
+        </div>
+
+        <!-- View Toggle -->
+        <div class="filter-view-toggle btn-group" role="group">
+            <button type="button"
+                    class="btn btn-outline-secondary active"
+                    data-view="grid"
+                    onclick="FilterToolbar.setView('grid')">
+                <i class="bi bi-grid-3x3-gap"></i>
+            </button>
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    data-view="list"
+                    onclick="FilterToolbar.setView('list')">
+                <i class="bi bi-list"></i>
+            </button>
+        </div>
+
+        <!-- Clear Filters -->
+        <button class="btn btn-link filter-clear" onclick="FilterToolbar.clearAll()">
+            <i class="bi bi-x-circle"></i> Clear
+        </button>
+    </div>
+
+    <!-- Active Filters Tags -->
+    <div class="active-filters" id="active-filters" style="display: none;">
+        <span class="active-filters-label">Active:</span>
+        <div class="active-filters-tags" id="active-filters-tags"></div>
+    </div>
+</div>
+
+<style>
+.filter-toolbar {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.filter-toolbar-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.filter-search {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+}
+
+.filter-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+}
+
+.filter-search input {
+    padding-left: 40px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+.filter-search input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+
+.filter-dropdown {
+    min-width: 140px;
+}
+
+.filter-dropdown .form-select {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    font-size: 0.9rem;
+}
+
+.filter-view-toggle .btn {
+    padding: 8px 12px;
+}
+
+.filter-view-toggle .btn.active {
+    background: #667eea;
+    border-color: #667eea;
+    color: white;
+}
+
+.filter-clear {
+    color: #999;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.filter-clear:hover {
+    color: #dc3545;
+}
+
+.active-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.active-filters-label {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.active-filters-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.filter-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-size: 0.8rem;
+}
+
+.filter-tag button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.filter-tag button:hover {
+    color: #dc3545;
+}
+
+@media (max-width: 768px) {
+    .filter-toolbar-inner {
+        flex-direction: column;
+    }
+
+    .filter-search,
+    .filter-dropdown {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+// Filter Toolbar functionality
+const FilterToolbar = {
+    filters: {
+        search: '',
+        category: '',
+        source: '',
+        date: '',
+        sort: 'rank'
+    },
+    view: 'grid',
+    onChange: null, // Callback function
+
+    init: function(onChange) {
+        this.onChange = onChange;
+    },
+
+    onSearch: function(value) {
+        this.filters.search = value;
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    onCategoryChange: function(value) {
+        this.filters.category = value;
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    onSourceChange: function(value) {
+        this.filters.source = value;
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    onDateChange: function(value) {
+        this.filters.date = value;
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    onSortChange: function(value) {
+        this.filters.sort = value;
+        this.triggerChange();
+    },
+
+    setView: function(view) {
+        this.view = view;
+
+        // Update button states
+        document.querySelectorAll('.filter-view-toggle .btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.view === view);
+        });
+
+        // Update container class
+        const container = document.getElementById('articles-container');
+        if (container) {
+            container.classList.toggle('view-grid', view === 'grid');
+            container.classList.toggle('view-list', view === 'list');
+        }
+    },
+
+    clearAll: function() {
+        this.filters = {
+            search: '',
+            category: '',
+            source: '',
+            date: '',
+            sort: 'rank'
+        };
+
+        // Reset form elements
+        document.getElementById('filter-search-input').value = '';
+        document.getElementById('filter-category').value = '';
+        document.getElementById('filter-source').value = '';
+        document.getElementById('filter-date').value = '';
+        document.getElementById('filter-sort').value = 'rank';
+
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    removeFilter: function(key) {
+        this.filters[key] = '';
+        document.getElementById(`filter-${key}`).value = '';
+        this.updateActiveFilters();
+        this.triggerChange();
+    },
+
+    updateActiveFilters: function() {
+        const container = document.getElementById('active-filters');
+        const tagsContainer = document.getElementById('active-filters-tags');
+
+        const activeFilters = Object.entries(this.filters)
+            .filter(([key, value]) => value && key !== 'sort')
+            .map(([key, value]) => ({key, value}));
+
+        if (activeFilters.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+
+        container.style.display = 'flex';
+        tagsContainer.innerHTML = activeFilters.map(f => `
+            <span class="filter-tag">
+                ${f.key}: ${f.value}
+                <button onclick="FilterToolbar.removeFilter('${f.key}')">&times;</button>
+            </span>
+        `).join('');
+    },
+
+    triggerChange: function() {
+        if (this.onChange) {
+            this.onChange(this.filters, this.view);
+        }
+    },
+
+    getFilters: function() {
+        return {...this.filters, view: this.view};
+    }
+};
+
+// Make globally available
+window.FilterToolbar = FilterToolbar;
+</script>

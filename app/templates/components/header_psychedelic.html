@@ -1,0 +1,29 @@
+{% macro header_bar(title_icon, title_text, stats=[], nav_buttons=[]) -%}
+<header class="psy-header">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <h1 class="m-0"><i class="fas {{ title_icon }} me-2"></i>{{ title_text }}</h1>
+      </div>
+      <div class="stats-compact m-0">
+        {% for s in stats %}
+        <div class="stat-card-compact">
+          <div class="stat-number" {% if s.id %}id="{{ s.id }}"{% endif %}>{{ s.value }}</div>
+          <div class="stat-label">{{ s.label }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="d-inline-flex gap-2 align-items-center">
+        {% for b in nav_buttons %}
+          <a href="{{ b.href }}" class="btn {{ b.class or 'btn-outline-light btn-sm' }}" {% if b.onclick %}onclick="{{ b.onclick }}"{% endif %}>
+            {% if b.icon %}<i class="fas {{ b.icon }} me-1"></i>{% endif %}{{ b.text }}
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="quick-actions-bar">
+      {{ caller() }}
+    </div>
+  </div>
+</header>
+{%- endmacro %}

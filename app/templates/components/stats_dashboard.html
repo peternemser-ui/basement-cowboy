@@ -1,0 +1,258 @@
+<!-- Stats Dashboard Component -->
+<!-- Usage: {% include 'components/stats_dashboard.html' %} -->
+
+<div class="stats-dashboard">
+    <div class="row g-4">
+        <!-- Articles Count -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-primary-soft">
+                    <i class="bi bi-newspaper"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 class="stat-value" id="stat-articles">{{ stats.articles|default(0) }}</h3>
+                    <p class="stat-label">Total Articles</p>
+                </div>
+                <div class="stat-trend trend-up">
+                    <i class="bi bi-arrow-up"></i>
+                    <span>+{{ stats.new_today|default(0) }} today</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sources Scraped -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-success-soft">
+                    <i class="bi bi-globe"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 class="stat-value" id="stat-sources">{{ stats.sources|default(0) }}</h3>
+                    <p class="stat-label">News Sources</p>
+                </div>
+                <div class="stat-trend">
+                    <span>Active</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Published -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-info-soft">
+                    <i class="bi bi-send-check"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 class="stat-value" id="stat-published">{{ stats.published|default(0) }}</h3>
+                    <p class="stat-label">Published</p>
+                </div>
+                <div class="stat-trend trend-up">
+                    <i class="bi bi-arrow-up"></i>
+                    <span>{{ stats.published_today|default(0) }} today</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Cost -->
+        <div class="col-sm-6 col-lg-3">
+            <div class="stat-card">
+                <div class="stat-icon bg-warning-soft">
+                    <i class="bi bi-currency-dollar"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 class="stat-value" id="stat-cost">${{ "%.2f"|format(stats.ai_cost|default(0)) }}</h3>
+                    <p class="stat-label">AI Cost Today</p>
+                </div>
+                <div class="stat-trend">
+                    <span>Limit: ${{ stats.daily_limit|default(50) }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Distribution -->
+    <div class="row g-4 mt-2">
+        <div class="col-lg-6">
+            <div class="stat-card-large">
+                <h4 class="stat-card-title">Category Distribution</h4>
+                <div class="category-bars" id="category-distribution">
+                    {% for cat, count in (stats.categories|default({})).items() %}
+                    <div class="category-bar-item">
+                        <div class="category-bar-label">
+                            <span>{{ cat }}</span>
+                            <span>{{ count }}</span>
+                        </div>
+                        <div class="category-bar">
+                            <div class="category-bar-fill" style="width: {{ (count / stats.articles * 100)|round|int if stats.articles else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No category data available</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="stat-card-large">
+                <h4 class="stat-card-title">Recent Activity</h4>
+                <div class="activity-feed" id="activity-feed">
+                    {% for activity in (stats.recent_activity|default([]))[:5] %}
+                    <div class="activity-item">
+                        <div class="activity-icon {{ activity.type }}">
+                            <i class="bi bi-{{ activity.icon|default('circle') }}"></i>
+                        </div>
+                        <div class="activity-content">
+                            <p class="activity-text">{{ activity.message }}</p>
+                            <span class="activity-time">{{ activity.time }}</span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No recent activity</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.stats-dashboard {
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+}
+
+.stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.bg-primary-soft { background: #e3f2fd; color: #1976d2; }
+.bg-success-soft { background: #e8f5e9; color: #388e3c; }
+.bg-info-soft { background: #e1f5fe; color: #0288d1; }
+.bg-warning-soft { background: #fff8e1; color: #f57c00; }
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0;
+    color: #333;
+}
+
+.stat-label {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.stat-trend {
+    font-size: 0.75rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.stat-trend.trend-up { color: #28a745; }
+.stat-trend.trend-down { color: #dc3545; }
+
+.stat-card-large {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    height: 100%;
+}
+
+.stat-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.category-bar-item {
+    margin-bottom: 12px;
+}
+
+.category-bar-label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+}
+
+.category-bar {
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.category-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.activity-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    background: #e9ecef;
+}
+
+.activity-icon.scrape { background: #e3f2fd; color: #1976d2; }
+.activity-icon.publish { background: #e8f5e9; color: #388e3c; }
+.activity-icon.ai { background: #f3e5f5; color: #7b1fa2; }
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-text {
+    margin: 0;
+    font-size: 0.875rem;
+    color: #333;
+}
+
+.activity-time {
+    font-size: 0.75rem;
+    color: #999;
+}
+</style>
